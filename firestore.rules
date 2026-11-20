@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isPortfolioAdmin() {
+      return request.auth != null
+        && request.auth.uid == '8LGxmtgTk0Z7Ad6ofDLobg36Nh73';
+    }
+
+    match /draftContent/{sectionId} {
+      allow read, write: if isPortfolioAdmin();
+    }
+
+    match /draftProjects/{projectId} {
+      allow read, write: if isPortfolioAdmin();
+    }
+
+    match /draftExperience/{experienceId} {
+      allow read, write: if isPortfolioAdmin();
+    }
+
+    match /draftAchievements/{achievementId} {
+      allow read, write: if isPortfolioAdmin();
+    }
+
+    match /publicContent/{sectionId} {
+      allow read: if true;
+      allow write: if isPortfolioAdmin();
+    }
+
+    match /publicProjects/{projectId} {
+      allow read: if true;
+      allow write: if isPortfolioAdmin();
+    }
+
+    match /publicExperience/{experienceId} {
+      allow read: if true;
+      allow write: if isPortfolioAdmin();
+    }
+
+    match /publicAchievements/{achievementId} {
+      allow read: if true;
+      allow write: if isPortfolioAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
