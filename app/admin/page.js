@@ -28,6 +28,8 @@ import {
 } from "../../lib/contentAdmin";
 import { uploadCloudinaryFiles } from "../../lib/cloudinaryClient";
 import { adminUid, auth, db, isFirebaseConfigured } from "../../lib/firebase";
+import { MAX_MEMORY_IMAGES } from "../../lib/workMemories.mjs";
+import { socialPlatforms } from "../../lib/socialLinks.mjs";
 import {
   defaultAbout,
   defaultContact,
@@ -51,6 +53,8 @@ const tabs = [
   ["experience", "Experience"],
   ["projects", "Projects"],
   ["achievements", "Training & Certificates"],
+  ["memories", "Work Memories"],
+  ["lessons", "Work Lessons"],
   ["feedback", "Feedback"],
 ];
 
@@ -58,6 +62,8 @@ const itemLabels = {
   projects: "Project",
   experience: "Experience",
   achievements: "Training / Certificate",
+  memories: "Memory album",
+  lessons: "Work lesson",
 };
 
 async function deleteFeedbackLikes(database, feedbackId) {
@@ -104,6 +110,13 @@ export default function AdminPage() {
     experience: [],
     projects: [],
     achievements: [],
+    memories: [],
+    lessons: [],
+  });
+  const [workContentErrors, setWorkContentErrors] = useState({});
+  const [workContentLoading, setWorkContentLoading] = useState({
+    memories: true,
+    lessons: true,
   });
   const [feedbackSubmissions, setFeedbackSubmissions] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
@@ -259,6 +272,57 @@ export default function AdminPage() {
         setError(snapshotError.message);
       },
     );
+    const unsubscribeWorkContent = [
+      ["memories", "draftMemories"],
+      ["lessons", "draftLessons"],
+    ].map(([section, collectionName]) =>
+      onSnapshot(
+        collection(db, collectionName),
+        (snapshot) => {
+          setItems((current) => {
+            const savedItems = snapshot.docs
+              .map((item) => {
+                const data = item.data();
+                return {
+                  id: item.id,
+                  ...data,
+                  images: Array.isArray(data.images)
+                    ? data.images.filter(
+                        (asset) =>
+                          asset &&
+                          typeof asset.url === "string" &&
+                          typeof asset.publicId === "string",
+                      )
+                    : [],
+                };
+              });
+            const savedIds = new Set(savedItems.map((item) => item.id));
+            const unsavedItems = current[section].filter(
+              (item) => item.status === "unsaved" && !savedIds.has(item.id),
+            );
+            return {
+              ...current,
+              [section]: [...unsavedItems, ...savedItems].sort(
+                (left, right) => (left.order || 0) - (right.order || 0),
+              ),
+            };
+          });
+          setWorkContentErrors((current) => ({ ...current, [section]: "" }));
+          setWorkContentLoading((current) => ({ ...current, [section]: false }));
+        },
+        (snapshotError) => {
+          console.error(`Could not load ${section} drafts:`, snapshotError);
+          setWorkContentErrors((current) => ({
+            ...current,
+            [section]:
+              snapshotError.code === "permission-denied"
+                ? "Access denied. Publish the updated Firestore rules before managing this section."
+                : `Could not load this section: ${snapshotError.message}`,
+          }));
+          setWorkContentLoading((current) => ({ ...current, [section]: false }));
+        },
+      ),
+    );
     const unsubscribeFeedback = onSnapshot(
       collection(db, "feedbackInbox"),
       (snapshot) => {
@@ -285,6 +349,7 @@ export default function AdminPage() {
       unsubscribeProjects();
       unsubscribeExperience();
       unsubscribeAchievements();
+      unsubscribeWorkContent.forEach((unsubscribe) => unsubscribe());
       unsubscribeFeedback();
     };
   }, [user]);
@@ -356,6 +421,7 @@ export default function AdminPage() {
       ? null
       : items[section].find((candidate) => candidate.id === itemId);
     const currentImages = item?.images || [];
+    const maximumImages = section === "memories" ? MAX_MEMORY_IMAGES : 4;
     if (
       (isHomeMedia ||
         isExperienceLogo ||
@@ -369,9 +435,13 @@ export default function AdminPage() {
       !isHomeMedia &&
       !isExperienceLogo &&
       !Number.isInteger(targetImageIndex) &&
-      currentImages.length + files.length > 4
+      currentImages.length + files.length > maximumImages
     ) {
-      setError("Projects and certificates can have up to 4 images.");
+      setError(
+        section === "memories"
+          ? "Memory albums can have up to 20 images."
+          : "Projects and certificates can have up to 4 images.",
+      );
       return;
     }
 
@@ -528,6 +598,10 @@ export default function AdminPage() {
       setError("Please enter a title before saving or publishing.");
       return false;
     }
+    if (section === "memories" && !item.organization.trim()) {
+      setError("Please enter a company for this memory album.");
+      return false;
+    }
     if (section === "experience") {
       if (item.endDate && !item.startDate) {
         setError("Choose a start date before entering an end date.");
@@ -580,9 +654,25 @@ export default function AdminPage() {
   const removeItem = (section, item) => {
     if (
       !window.confirm(
-        `Delete "${item.title}" from the portfolio? Its Cloudinary assets will remain in your account.`,
+        section === "lessons"
+          ? `Delete "${item.title}" from the portfolio?`
+          : `Delete "${item.title}" from the portfolio? Its Cloudinary assets will remain in your account.`,
       )
     ) {
+      return;
+    }
+
+    if (
+      (section === "memories" || section === "lessons") &&
+      item.status === "unsaved"
+    ) {
+      setItems((current) => ({
+        ...current,
+        [section]: current[section].filter((entry) => entry.id !== item.id),
+      }));
+      setError("");
+      setMessage(`${itemLabels[section]} deleted.`);
+      setMessageTone("success");
       return;
     }
 
@@ -944,6 +1034,21 @@ export default function AdminPage() {
                   value={sectionData.website}
                   onChange={(value) => updateSection(section, "website", value)}
                 />
+                <div className="sm:col-span-2">
+                  <p className="font-semibold">Social media links</p>
+                  <p className="mt-1 text-sm text-[#65777a] dark:text-white/60">
+                    Add complete profile URLs. Only filled links appear in the footer after publishing.
+                  </p>
+                </div>
+                {socialPlatforms.map(({ field, label }) => (
+                  <TextField
+                    key={field}
+                    label={`${label} URL`}
+                    type="url"
+                    value={sectionData[field]}
+                    onChange={(value) => updateSection(section, field, value)}
+                  />
+                ))}
               </>
             )}
           </div>
@@ -985,6 +1090,12 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+      ) : (section === "memories" || section === "lessons") &&
+        workContentErrors[section] ? (
+        <AdminNotice tone="error">{workContentErrors[section]}</AdminNotice>
+      ) : (section === "memories" || section === "lessons") &&
+        workContentLoading[section] ? (
+        <p>Loading {section}...</p>
       ) : (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -993,7 +1104,11 @@ export default function AdminPage() {
                 ? "Projects"
                 : section === "experience"
                   ? "Professional Experience"
-                  : "Training & Certificates"}
+                  : section === "memories"
+                    ? "Work Memories"
+                    : section === "lessons"
+                      ? "Work Lessons"
+                      : "Training & Certificates"}
             </h2>
             <button
               type="button"
@@ -1005,7 +1120,11 @@ export default function AdminPage() {
                 ? "project"
                 : section === "experience"
                   ? "experience"
-                  : "certificate"}
+                  : section === "memories"
+                    ? "memory album"
+                    : section === "lessons"
+                      ? "lesson"
+                      : "certificate"}
             </button>
           </div>
           {items[section].length === 0 && (
@@ -1458,8 +1577,19 @@ function ItemEditor({
 }) {
   const isProject = section === "projects";
   const isExperience = section === "experience";
+  const isMemory = section === "memories";
+  const isLesson = section === "lessons";
   const images = item.images || [];
-  const itemType = isProject ? "project" : isExperience ? "experience" : "certificate";
+  const maximumImages = isMemory ? MAX_MEMORY_IMAGES : 4;
+  const itemType = isProject
+    ? "project"
+    : isExperience
+      ? "experience"
+      : isMemory
+        ? "memory album"
+        : isLesson
+          ? "lesson"
+          : "certificate";
 
   return (
     <article className="space-y-4 rounded-2xl border border-[#dce7e4] bg-white/70 p-5 shadow-sm dark:border-white/10 dark:bg-[#102127]/70">
@@ -1545,13 +1675,16 @@ function ItemEditor({
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
+          {!isLesson && (
+            <TextField
+              label="Date / year"
+              value={item.date}
+              onChange={(value) => onChange("date", value)}
+            />
+          )}
           <TextField
-            label="Date / year"
-            value={item.date}
-            onChange={(value) => onChange("date", value)}
-          />
-          <TextField
-            label="Organization"
+            label={isMemory ? "Company" : "Organization"}
+            required={isMemory}
             value={item.organization}
             onChange={(value) => onChange("organization", value)}
           />
@@ -1573,19 +1706,19 @@ function ItemEditor({
         />
       )}
 
-      {!isExperience && (
+      {!isExperience && !isLesson && (
         <div>
           <span className="mb-2 block">
-            Images (up to 4; JPG, PNG, or WEBP; 5 MB max each)
+            Images (up to {maximumImages}; JPG, PNG, or WEBP; 5 MB max each)
           </span>
           <label className="inline-flex cursor-pointer rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-4 py-2 font-medium text-[#126d5b] transition hover:bg-[#d7f0e7] dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]">
-            {images.length >= 4 ? "Image limit reached" : "Add images"}
+            {images.length >= maximumImages ? "Image limit reached" : "Add images"}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
               multiple
               className="sr-only"
-              disabled={busy || images.length >= 4}
+              disabled={busy || images.length >= maximumImages}
               onChange={(event) => onUpload(event, "images", null)}
             />
           </label>
@@ -1639,6 +1772,11 @@ function ItemEditor({
               </div>
             ))}
           </div>
+          {isMemory && (
+            <p className="mt-3 text-sm text-[#667779] dark:text-white/60">
+              Removed or replaced files remain in Cloudinary until deleted there.
+            </p>
+          )}
         </div>
       )}
 

@@ -1,0 +1,83 @@
+.viewport {
+  overflow-x: auto;
+  padding: 3px 0;
+}
+
+.track {
+  display: flex;
+  width: max-content;
+}
+
+.photos {
+  display: flex;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+.photo {
+  width: 160px;
+  flex: none;
+}
+
+.running {
+  overflow-x: hidden;
+}
+
+.running .track {
+  animation: slide var(--marquee-duration) linear infinite;
+}
+
+.paused .track {
+  animation-play-state: paused;
+}
+
+.running:has(button:focus-visible) {
+  overflow-x: auto;
+}
+
+.running:has(button:focus-visible) .track {
+  animation: none;
+}
+
+.running:has(button:focus-visible) .duplicate {
+  display: none;
+}
+
+@keyframes slide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (hover: hover) {
+  .running:hover .track {
+    animation-play-state: paused;
+  }
+}
+
+@media (min-width: 640px) {
+  .photo {
+    width: 192px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .photo {
+    width: 240px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .running {
+    overflow-x: auto;
+  }
+
+  .running .track {
+    animation: none;
+  }
+
+  .duplicate,
+  .motionControl {
+    display: none;
+  }
+}
