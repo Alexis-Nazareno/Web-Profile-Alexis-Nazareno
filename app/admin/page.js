@@ -19,16 +19,23 @@ import {
 import PortfolioImage from "../components/PortfolioImage";
 import MonthPicker from "../components/MonthPicker";
 import RichTextEditor from "../components/RichTextEditor";
+import BulkContentImport from "./BulkContentImport";
 import {
   deleteContent,
   publishCvStarterContent,
   publishDraft,
   saveDraft,
+  saveImportedDrafts,
   unpublishDraft,
 } from "../../lib/contentAdmin";
 import { uploadCloudinaryFiles } from "../../lib/cloudinaryClient";
 import { adminUid, auth, db, isFirebaseConfigured } from "../../lib/firebase";
 import { MAX_MEMORY_IMAGES } from "../../lib/workMemories.mjs";
+import {
+  MAX_LESSON_IMPORT_BYTES,
+  MAX_LESSONS_PER_IMPORT,
+  parseLessonImport,
+} from "../../lib/lessonImport.mjs";
 import { socialPlatforms } from "../../lib/socialLinks.mjs";
 import {
   defaultAbout,
@@ -126,6 +133,10 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState("success");
   const [error, setError] = useState("");
+  const [lessonImportText, setLessonImportText] = useState("");
+  const [lessonImportPreview, setLessonImportPreview] = useState([]);
+  const [lessonImportIntro, setLessonImportIntro] = useState(null);
+  const [lessonImportError, setLessonImportError] = useState("");
 
   useEffect(() => {
     if (!auth) {
@@ -181,9 +192,8 @@ export default function AdminPage() {
     const unsubscribeProjects = onSnapshot(
       collection(db, "draftProjects"),
       (snapshot) => {
-        setItems((current) => ({
-          ...current,
-          projects: snapshot.docs
+        setItems((current) => {
+          const savedItems = snapshot.docs
             .map((item) => {
               const data = item.data();
               return {
@@ -198,9 +208,18 @@ export default function AdminPage() {
                     )
                   : [],
               };
-            })
-            .sort((left, right) => (left.order || 0) - (right.order || 0)),
-        }));
+            });
+          const savedIds = new Set(savedItems.map((item) => item.id));
+          const unsavedItems = current.projects.filter(
+            (item) => item.status === "unsaved" && !savedIds.has(item.id),
+          );
+          return {
+            ...current,
+            projects: [...unsavedItems, ...savedItems].sort(
+              (left, right) => (left.order || 0) - (right.order || 0),
+            ),
+          };
+        });
       },
       (snapshotError) => {
         console.error("Could not load project drafts:", snapshotError);
@@ -246,9 +265,8 @@ export default function AdminPage() {
     const unsubscribeAchievements = onSnapshot(
       collection(db, "draftAchievements"),
       (snapshot) => {
-        setItems((current) => ({
-          ...current,
-          achievements: snapshot.docs
+        setItems((current) => {
+          const savedItems = snapshot.docs
             .map((item) => {
               const data = item.data();
               return {
@@ -263,9 +281,18 @@ export default function AdminPage() {
                     )
                   : [],
               };
-            })
-            .sort((left, right) => (left.order || 0) - (right.order || 0)),
-        }));
+            });
+          const savedIds = new Set(savedItems.map((item) => item.id));
+          const unsavedItems = current.achievements.filter(
+            (item) => item.status === "unsaved" && !savedIds.has(item.id),
+          );
+          return {
+            ...current,
+            achievements: [...unsavedItems, ...savedItems].sort(
+              (left, right) => (left.order || 0) - (right.order || 0),
+            ),
+          };
+        });
       },
       (snapshotError) => {
         console.error("Could not load achievement drafts:", snapshotError);
@@ -593,6 +620,147 @@ export default function AdminPage() {
     }));
   };
 
+  const prepareLessonImport = (text) => {
+    setLessonImportError("");
+    setLessonImportPreview([]);
+    setLessonImportIntro(null);
+    try {
+      if (new TextEncoder().encode(text).length > MAX_LESSON_IMPORT_BYTES) {
+        throw new Error("The text must be 512 KB or smaller.");
+      }
+      if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(text)) {
+        throw new Error("The text contains unsupported control characters.");
+      }
+      const { lessons, intro } = parseLessonImport(text);
+      setLessonImportPreview(lessons);
+      setLessonImportIntro(intro);
+    } catch (previewError) {
+      setLessonImportError(previewError.message);
+    }
+  };
+
+  const importLessons = async (files) => {
+    if (busy || uploading) {
+      setLessonImportError("Wait for the current action to finish before importing lessons.");
+      return;
+    }
+    setLessonImportError("");
+    setLessonImportPreview([]);
+    setLessonImportIntro(null);
+    if (files.length !== 1 || !/\.txt$/i.test(files[0].name)) {
+      setLessonImportError("Choose one .txt file to import work lessons.");
+      return;
+    }
+    if (files[0].size > MAX_LESSON_IMPORT_BYTES) {
+      setLessonImportError("The text file must be 512 KB or smaller.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const bytes = await files[0].arrayBuffer();
+      let text;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        throw new Error("Could not read the file as UTF-8 text. Save it as UTF-8 and try again.");
+      }
+      setLessonImportText(text);
+      prepareLessonImport(text);
+    } catch (importError) {
+      console.error("Could not read work lesson file:", importError);
+      setLessonImportError(importError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveImportedLessons = async () => {
+    if (busy || uploading) {
+      setLessonImportError("Wait for the current action to finish before importing lessons.");
+      return;
+    }
+    if (lessonImportPreview.some((lesson) => !lesson.title.trim())) {
+      setLessonImportError("Add a title to each lesson before saving.");
+      return;
+    }
+    if (!window.confirm(
+      `Save ${lessonImportPreview.length} lesson${lessonImportPreview.length === 1 ? "" : "s"} as drafts? They will not be published. Save any edits to existing lessons first, as the list may refresh.`,
+    )) return;
+
+    setBusy(true);
+    setError("");
+    setMessage("");
+    setLessonImportError("");
+    try {
+      const firstOrder = items.lessons.reduce(
+        (lowest, item) => Math.min(lowest, Number(item.order) || 0),
+        0,
+      ) - lessonImportPreview.length;
+      const drafts = lessonImportPreview.map((lesson, index) => ({
+        ...newItem("lessons", firstOrder + index),
+        ...lesson,
+        title: lesson.title.trim(),
+        organization: lesson.organization.trim(),
+      }));
+      await saveImportedDrafts("lessons", drafts);
+      setMessage(`${drafts.length} lesson${drafts.length === 1 ? "" : "s"} imported as drafts. Review them before publishing.`);
+      setMessageTone("draft");
+      setLessonImportText("");
+      setLessonImportPreview([]);
+      setLessonImportIntro(null);
+    } catch (importError) {
+      console.error("Could not import work lessons:", importError);
+      setLessonImportError(importError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importContentDrafts = async (section, entries) => {
+    if (busy || uploading) throw new Error("Wait for the current action to finish before importing.");
+    const name = section === "projects" ? "projects" : "training and certificates";
+    if (!window.confirm(
+      `Save ${entries.length} ${name} as drafts? They will not be published. Save any edits to existing entries first, as the list may refresh.`,
+    )) return false;
+
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const collectionName = section === "projects" ? "draftProjects" : "draftAchievements";
+      const snapshot = await getDocs(collection(db, collectionName));
+      const existing = [
+        ...items[section],
+        ...snapshot.docs.map((entry) => entry.data()),
+      ];
+      const firstOrder = existing.reduce(
+        (lowest, item) => Math.min(lowest, Number(item.order) || 0),
+        0,
+      ) - entries.length;
+      const drafts = entries.map((entry, index) => {
+        const draft = {
+          ...newItem(section, firstOrder + index),
+          ...entry,
+          title: entry.title.trim(),
+        };
+        if (section === "projects") {
+          draft.liveUrl = (entry.liveUrl || "").trim();
+          draft.sourceUrl = (entry.sourceUrl || "").trim();
+          draft.technologies = (entry.technologies || "")
+            .split(",").map((value) => value.trim()).filter(Boolean);
+        }
+        return draft;
+      });
+      await saveImportedDrafts(section, drafts);
+      setMessage(`${drafts.length} ${name} imported as drafts. Review them before publishing.`);
+      setMessageTone("draft");
+      return true;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const validateItem = (section, item) => {
     if (!item.title.trim()) {
       setError("Please enter a title before saving or publishing.");
@@ -663,7 +831,7 @@ export default function AdminPage() {
     }
 
     if (
-      (section === "memories" || section === "lessons") &&
+      ["memories", "lessons", "projects", "achievements"].includes(section) &&
       item.status === "unsaved"
     ) {
       setItems((current) => ({
@@ -1127,6 +1295,126 @@ export default function AdminPage() {
                       : "certificate"}
             </button>
           </div>
+          {(section === "projects" || section === "achievements") && (
+            <BulkContentImport
+              key={section}
+              section={section}
+              busy={busy || uploading}
+              onSave={(entries) => importContentDrafts(section, entries)}
+            />
+          )}
+          {section === "lessons" && (
+            <div
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                void importLessons(Array.from(event.dataTransfer.files));
+              }}
+              className="rounded-2xl border border-dashed border-[#9bcdbd] bg-[#f2faf7] p-5 dark:border-[#2d705f] dark:bg-[#102a26]"
+            >
+              <p className="font-semibold">Import work lessons</p>
+              <p className="mt-1 text-sm leading-6 text-[#526e6b] dark:text-white/70">
+                Paste your text below or drop a UTF-8 .txt file here. Use headings
+                or --- between lessons when possible. Review and edit the preview
+                before saving; nothing is published automatically.
+              </p>
+              <label className="mt-4 inline-flex cursor-pointer rounded-lg border border-[#45b69a] bg-white px-4 py-2 font-medium text-[#126d5b] transition hover:bg-[#e8f7f2] focus-within:outline focus-within:outline-2 focus-within:outline-[#168e78] dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]">
+                Choose .txt file
+                <input
+                  type="file"
+                  accept=".txt,text/plain"
+                  disabled={busy || uploading}
+                  className="sr-only"
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files || []);
+                    event.currentTarget.value = "";
+                    if (files.length) void importLessons(files);
+                  }}
+                />
+              </label>
+              <label className="mt-4 block">
+                <span className="mb-1 block text-sm font-medium">Paste lesson text</span>
+                <textarea
+                  rows={6}
+                  value={lessonImportText}
+                  onChange={(event) => {
+                    setLessonImportText(event.target.value);
+                    setLessonImportPreview([]);
+                    setLessonImportIntro(null);
+                    setLessonImportError("");
+                  }}
+                  placeholder="Paste your lessons here..."
+                  className="w-full rounded-lg border border-[#cbd9d5] bg-white px-3 py-2.5 text-[#122126] outline-none focus:border-[#22a98a] focus:ring-2 focus:ring-[#22a98a]/20 dark:border-white/15 dark:bg-[#0b1c22] dark:text-white"
+                />
+              </label>
+              <p className="mt-1 text-xs text-[#526e6b] dark:text-white/60">
+                Up to 512 KB and 200 lessons. A title is needed to save each draft; organization and description are optional.
+              </p>
+              <button
+                type="button"
+                disabled={busy || uploading}
+                onClick={() => prepareLessonImport(lessonImportText)}
+                className="mt-3 rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e]"
+              >
+                Preview lessons
+              </button>
+              {lessonImportError && (
+                <p role="alert" className="mt-3 text-sm text-[#b42318] dark:text-[#ffaaa8]">
+                  {lessonImportError}
+                </p>
+              )}
+              {lessonImportIntro && (
+                <div className="mt-4 rounded-lg border border-[#b8ccc5] p-3 text-sm dark:border-white/15">
+                  <p>Possible introduction excluded: <strong>{lessonImportIntro.title}</strong></p>
+                  <p className="mt-1 whitespace-pre-wrap">{lessonImportIntro.description}</p>
+                  <button
+                    type="button"
+                    disabled={lessonImportPreview.length >= MAX_LESSONS_PER_IMPORT}
+                    onClick={() => {
+                      setLessonImportPreview((current) => [lessonImportIntro, ...current]);
+                      setLessonImportIntro(null);
+                    }}
+                    className="mt-2 font-semibold text-[#126d5b] underline disabled:opacity-50 dark:text-[#83e6ce]"
+                  >
+                    Include as a lesson
+                  </button>
+                  {lessonImportPreview.length >= MAX_LESSONS_PER_IMPORT && (
+                    <p className="mt-1">Remove a lesson from the preview to include this introduction.</p>
+                  )}
+                </div>
+              )}
+              {lessonImportPreview.length > 0 && (
+                <div className="mt-5 space-y-4">
+                  <p className="font-semibold">Preview: {lessonImportPreview.length} lesson{lessonImportPreview.length === 1 ? "" : "s"}</p>
+                  {lessonImportPreview.map((lesson, index) => (
+                    <div key={index} className="space-y-3 rounded-xl border border-[#cbded7] bg-white p-4 dark:border-white/15 dark:bg-[#102127]">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold">Lesson {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => setLessonImportPreview((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                          className="text-sm font-medium text-[#b42318] underline dark:text-[#ffaaa8]"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <TextField label="Title" value={lesson.title} onChange={(value) => setLessonImportPreview((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: value } : item))} />
+                      <TextField label="Organization (optional)" value={lesson.organization} onChange={(value) => setLessonImportPreview((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, organization: value } : item))} />
+                      <TextField label="Description (optional)" multiline value={lesson.description} onChange={(value) => setLessonImportPreview((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: value } : item))} />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={busy || uploading}
+                    onClick={() => void saveImportedLessons()}
+                    className="rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e]"
+                  >
+                    Save as drafts
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {items[section].length === 0 && (
             <p className="text-gray-600 dark:text-gray-300">
               No {section} yet. Add one to get started.
@@ -1677,7 +1965,7 @@ function ItemEditor({
         <div className="grid gap-4 sm:grid-cols-2">
           {!isLesson && (
             <TextField
-              label="Date / year"
+              label={section === "achievements" ? "Date / year (e.g. May 2025)" : "Date / year"}
               value={item.date}
               onChange={(value) => onChange("date", value)}
             />

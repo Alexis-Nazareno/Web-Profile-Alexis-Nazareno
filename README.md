@@ -57,6 +57,49 @@ contain up to 20 photos. Add a company, title, optional date and description,
 then save a draft or publish it. Work Lessons can be saved and published
 separately. Check that you have permission to publish photos of other people.
 
+In **Work Lessons**, paste text or choose or drop a UTF-8 `.txt` file (up to
+512 KB and 200 lessons). Headings or lines of three or more hyphens separate
+entries; `Company — Title` also identifies the organization and title.
+Organization and description are optional. Check and edit the preview
+before saving drafts; a suspected introduction can be included if needed.
+Only a title is required to save a lesson. Review and publish drafts when
+ready. Save edits to existing lessons before importing, because the list
+refreshes.
+
+```text
+**Company name**
+## Lesson title
+The lesson description.
+---
+**Another company**
+## Another lesson
+Another description.
+```
+
+For **Projects** and **Training & Certificates**, paste text or drop a UTF-8
+`.txt` file in the corresponding section. Separate entries with `---` or
+headings; review the preview before saving them as drafts. Projects accept
+`Title`, `Description`, `Technologies` (comma separated), `Live URL`, and
+`Source URL`. Training and certificates accept `Title`, `Description`,
+`Organization` (or `Provider` / `Issuer`), and `Date` (or `Year`). Use
+complete HTTP(S) URLs. Only titles are required; add images separately after
+import. Save edits to existing entries first, because their list may refresh.
+Published training and certificates appear newest first by their date. Use a
+year (`2025`), month and year (`May 2025` or `2025-05`), or a full date
+(`May 15, 2025` or `2025-05-15`). Dates without a month or day are sorted
+as the start of that year or month; missing or unrecognized dates appear last
+in their existing order.
+
+```text
+Title: Example project
+Description: A short description.
+Technologies: React, Next.js
+Live URL: https://example.com
+---
+Title: Another project
+Description: Another description.
+```
+
 Because the preset is unsigned, the client can upload but cannot securely
 delete assets from Cloudinary. Replacing or removing a file unlinks it from the
 portfolio document; the asset remains in Cloudinary and can be manually
