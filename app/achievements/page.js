@@ -3,9 +3,11 @@
 import { usePortfolio } from "../components/PortfolioProvider";
 import PortfolioCard from "../components/PortfolioCard";
 import SectionHeading from "../components/SectionHeading";
+import { AchievementsSkeleton } from "../components/PortfolioSkeleton";
 
 export default function AchievementsPage() {
-  const { achievements } = usePortfolio();
+  const { achievements, loading } = usePortfolio();
+  if (loading) return <AchievementsSkeleton />;
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 md:px-8 md:py-24">

@@ -2,9 +2,11 @@
 
 import { usePortfolio } from "../components/PortfolioProvider";
 import SectionHeading from "../components/SectionHeading";
+import { ContactSkeleton } from "../components/PortfolioSkeleton";
 
 export default function ContactPage() {
-  const { home, contact } = usePortfolio();
+  const { home, contact, loading } = usePortfolio();
+  if (loading) return <ContactSkeleton />;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-12 px-5 py-16 md:px-8 md:py-24 lg:grid-cols-[1fr_0.85fr] lg:gap-20">

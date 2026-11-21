@@ -11,6 +11,8 @@ import {
   signOut,
 } from "firebase/auth";
 import PortfolioImage from "../components/PortfolioImage";
+import MonthPicker from "../components/MonthPicker";
+import RichTextEditor from "../components/RichTextEditor";
 import {
   deleteContent,
   publishCvStarterContent,
@@ -25,6 +27,10 @@ import {
   defaultContact,
   defaultHome,
 } from "../../lib/portfolio";
+import {
+  formatExperienceDateRange,
+  parseExperienceDateRange,
+} from "../../lib/experienceDates";
 
 const defaultSections = {
   home: { ...defaultHome, published: false },
@@ -53,9 +59,17 @@ const newItem = (section, order) => ({
   description: "",
   ...(section === "projects"
     ? { liveUrl: "", sourceUrl: "", technologies: [] }
-    : { date: "", organization: "" }),
+    : section === "experience"
+      ? {
+          startDate: "",
+          endDate: "",
+          organization: "",
+          organizationLogo: null,
+        }
+      : { date: "", organization: "" }),
   images: [],
   published: false,
+  status: "unsaved",
   order,
 });
 
@@ -74,6 +88,7 @@ export default function AdminPage() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState("success");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -161,7 +176,28 @@ export default function AdminPage() {
         setItems((current) => ({
           ...current,
           experience: snapshot.docs
-            .map((item) => ({ id: item.id, ...item.data() }))
+              .map((item) => {
+                const data = item.data();
+                const hasStructuredDates =
+                  typeof data.startDate === "string" ||
+                  typeof data.endDate === "string";
+                const legacyDates = hasStructuredDates
+                  ? null
+                  : parseExperienceDateRange(data.date);
+
+                return {
+                  id: item.id,
+                  ...data,
+                  startDate: hasStructuredDates
+                    ? data.startDate || ""
+                    : legacyDates?.startDate || "",
+                  endDate: hasStructuredDates
+                    ? data.endDate || ""
+                    : legacyDates?.endDate || "",
+                  datePrecision:
+                    data.datePrecision || legacyDates?.datePrecision || "month",
+                };
+              })
             .sort((left, right) => (left.order || 0) - (right.order || 0)),
         }));
       },
@@ -208,13 +244,14 @@ export default function AdminPage() {
     };
   }, [user]);
 
-  const runAction = async (action, successMessage) => {
+  const runAction = async (action, successMessage, tone = "success") => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
       await action();
       setMessage(successMessage);
+      setMessageTone(tone);
     } catch (actionError) {
       console.error("Portfolio admin action failed:", actionError);
       setError(actionError.message);
@@ -268,16 +305,24 @@ export default function AdminPage() {
     }
 
     const isHomeMedia = section === "home";
+    const isExperienceLogo =
+      section === "experience" && field === "organizationLogo";
     const item = isHomeMedia
       ? null
       : items[section].find((candidate) => candidate.id === itemId);
     const currentImages = item?.images || [];
-    if ((isHomeMedia || Number.isInteger(targetImageIndex)) && files.length !== 1) {
+    if (
+      (isHomeMedia ||
+        isExperienceLogo ||
+        Number.isInteger(targetImageIndex)) &&
+      files.length !== 1
+    ) {
       setError("Select exactly one file to replace.");
       return;
     }
     if (
       !isHomeMedia &&
+      !isExperienceLogo &&
       !Number.isInteger(targetImageIndex) &&
       currentImages.length + files.length > 4
     ) {
@@ -292,6 +337,8 @@ export default function AdminPage() {
       const uploadedAssets = await uploadCloudinaryFiles(files);
       if (isHomeMedia) {
         updateSection("home", field, uploadedAssets[0]);
+      } else if (isExperienceLogo) {
+        updateItem(section, itemId, field, uploadedAssets[0]);
       } else {
         if (Number.isInteger(targetImageIndex)) {
           const nextImages = [...currentImages];
@@ -307,6 +354,7 @@ export default function AdminPage() {
       setMessage(
         `${uploadedAssets.length} file${uploadedAssets.length === 1 ? "" : "s"} uploaded.`,
       );
+      setMessageTone("success");
     } catch (uploadError) {
       if (uploadError.uploadedAssets?.length && field === "images") {
         updateItem(section, itemId, "images", [
@@ -334,6 +382,8 @@ export default function AdminPage() {
     setMessage("");
     if (section === "home") {
       updateSection("home", field, null);
+    } else if (field === "organizationLogo") {
+      updateItem(section, item.id, field, null);
     } else {
       updateItem(
         section,
@@ -343,6 +393,7 @@ export default function AdminPage() {
       );
     }
     setMessage("File removed from the draft. Save or publish to update the site.");
+    setMessageTone("draft");
   };
 
   const shiftImage = (section, item, index, direction) => {
@@ -362,9 +413,11 @@ export default function AdminPage() {
       setError("Please enter a name before saving.");
       return;
     }
+    const sectionName = tabs.find(([id]) => id === section)?.[1];
     void runAction(
       () => saveDraft(section, content),
-      `${tabs.find(([id]) => id === section)?.[1]} draft saved.`,
+      `${sectionName} draft saved.${content.published ? " The published version remains live." : ""}`,
+      "draft",
     );
   };
 
@@ -377,6 +430,7 @@ export default function AdminPage() {
     void runAction(
       () => publishDraft(section, content),
       `${tabs.find(([id]) => id === section)?.[1]} section published.`,
+      "success",
     );
   };
 
@@ -385,6 +439,7 @@ export default function AdminPage() {
     void runAction(
       () => unpublishDraft(section, content),
       `${tabs.find(([id]) => id === section)?.[1]} section unpublished.`,
+      "unpublished",
     );
   };
 
@@ -408,32 +463,62 @@ export default function AdminPage() {
   };
 
   const addItem = (section) => {
-    const nextItem = newItem(section, items[section].length);
+    const nextOrder =
+      items[section].reduce(
+        (lowestOrder, item) => Math.min(lowestOrder, Number(item.order) || 0),
+        0,
+      ) - 1;
+    const nextItem = newItem(section, nextOrder);
     setItems((current) => ({
       ...current,
-      [section]: [...current[section], nextItem],
+      [section]: [nextItem, ...current[section]],
     }));
   };
 
-  const saveItem = (section, item) => {
+  const validateItem = (section, item) => {
     if (!item.title.trim()) {
-      setError("Please enter a title before saving.");
-      return;
+      setError("Please enter a title before saving or publishing.");
+      return false;
     }
+    if (section === "experience") {
+      if (item.endDate && !item.startDate) {
+        setError("Choose a start date before entering an end date.");
+        return false;
+      }
+      if (item.startDate && item.endDate && item.endDate < item.startDate) {
+        setError("The end date must be the same as or later than the start date.");
+        return false;
+      }
+      if (!item.startDate && !item.date) {
+        setError("Choose a start date before saving this experience.");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const getItemForSave = (section, item) =>
+    section === "experience" && item.startDate
+      ? { ...item, date: formatExperienceDateRange(item) }
+      : item;
+
+  const saveItem = (section, item) => {
+    if (!validateItem(section, item)) return;
+    const content = getItemForSave(section, item);
     void runAction(
-      () => saveDraft(section, item),
-      `${itemLabels[section]} draft saved.`,
+      () => saveDraft(section, content),
+      `${itemLabels[section]} draft saved.${content.published ? " The published version remains live." : ""}`,
+      "draft",
     );
   };
 
   const publishItem = (section, item) => {
-    if (!item.title.trim()) {
-      setError("Please enter a title before publishing.");
-      return;
-    }
+    if (!validateItem(section, item)) return;
+    const content = getItemForSave(section, item);
     void runAction(
-      () => publishDraft(section, item),
+      () => publishDraft(section, content),
       `${itemLabels[section]} published.`,
+      "success",
     );
   };
 
@@ -441,6 +526,7 @@ export default function AdminPage() {
     void runAction(
       () => unpublishDraft(section, item),
       `${itemLabels[section]} unpublished.`,
+      "unpublished",
     );
 
   const removeItem = (section, item) => {
@@ -527,7 +613,11 @@ export default function AdminPage() {
         <p className="mb-6 text-gray-600 dark:text-gray-300">
           Sign in with the admin account created in Firebase Authentication.
         </p>
-        {error && <p role="alert" className="mb-4 text-red-600">{error}</p>}
+        {error && (
+          <AdminNotice tone="error" onDismiss={() => setError("")}>
+            {error}
+          </AdminNotice>
+        )}
         <form onSubmit={handleSignIn} className="space-y-4">
           <label className="block">
             <span className="mb-1 block">Admin email</span>
@@ -554,7 +644,7 @@ export default function AdminPage() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded bg-purple-600 px-4 py-3 font-semibold text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-[#168e78] px-4 py-3 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-60 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
           >
             {busy ? "Signing in..." : "Sign in"}
           </button>
@@ -579,7 +669,7 @@ export default function AdminPage() {
           type="button"
           onClick={importCv}
           disabled={busy || uploading}
-          className="rounded bg-purple-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+          className="rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
         >
           Import and publish CV
         </button>
@@ -587,23 +677,34 @@ export default function AdminPage() {
           type="button"
           onClick={handleSignOut}
           disabled={busy}
-          className="rounded border border-current px-4 py-2"
+          className="rounded-lg border border-[#cbd9d5] bg-white/70 px-4 py-2 font-medium transition hover:border-[#21b995] dark:border-white/15 dark:bg-white/5 dark:hover:border-[#4ed8b6]"
         >
           Sign out
         </button>
       </div>
 
-      {message && <p role="status" className="mb-4 text-green-700">{message}</p>}
-      {error && <p role="alert" className="mb-4 text-red-600">{error}</p>}
+      {message && (
+        <AdminNotice
+          tone={messageTone}
+          onDismiss={() => setMessage("")}
+        >
+          {message}
+        </AdminNotice>
+      )}
+      {error && (
+        <AdminNotice tone="error" onDismiss={() => setError("")}>
+          {error}
+        </AdminNotice>
+      )}
       {uploading && (
-        <p role="status" className="mb-4 text-gray-600 dark:text-gray-300">
+        <AdminNotice tone="info">
           Uploading media to Cloudinary...
-        </p>
+        </AdminNotice>
       )}
       {busy && (
-        <p role="status" className="mb-4 text-gray-600 dark:text-gray-300">
+        <AdminNotice tone="info">
           Saving changes...
-        </p>
+        </AdminNotice>
       )}
 
       <div className="mb-8 flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700">
@@ -616,10 +717,10 @@ export default function AdminPage() {
               setError("");
               setMessage("");
             }}
-            className={`border-b-2 px-4 py-3 font-medium ${
+            className={`border-b-2 px-4 py-3 font-medium transition-colors ${
               activeTab === id
-                ? "border-purple-600 text-purple-600"
-                : "border-transparent"
+                ? "border-[#168e78] text-[#168e78] dark:border-[#5be0bf] dark:text-[#5be0bf]"
+                : "border-transparent text-[#5b6d70] hover:text-[#168e78] dark:text-white/70 dark:hover:text-[#5be0bf]"
             }`}
           >
             {label}
@@ -629,16 +730,16 @@ export default function AdminPage() {
 
       {sectionData ? (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <h2 className="text-2xl font-semibold">
               {tabs.find(([id]) => id === section)?.[1]} section
             </h2>
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-sm dark:bg-gray-800">
-              {sectionData.published ? "Published" : "Draft / unpublished"}
-            </span>
           </div>
 
-          <div className="grid gap-4 rounded-xl border border-gray-200 p-5 dark:border-gray-700 sm:grid-cols-2">
+          <div className="grid gap-4 rounded-2xl border border-[#dce7e4] bg-white/70 p-5 shadow-sm dark:border-white/10 dark:bg-[#102127]/70 sm:grid-cols-2">
+            <div className="flex justify-end sm:col-span-2">
+              <ContentStatusBadge item={sectionData} />
+            </div>
             {section === "home" && (
               <>
                 <TextField
@@ -748,7 +849,7 @@ export default function AdminPage() {
               type="button"
               disabled={busy || uploading}
               onClick={() => saveSection(section)}
-              className="rounded border border-current px-4 py-2 disabled:opacity-50"
+              className="rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-4 py-2 font-semibold text-[#126d5b] transition hover:bg-[#d7f0e7] disabled:opacity-50 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]"
             >
               Save draft
             </button>
@@ -756,7 +857,7 @@ export default function AdminPage() {
               type="button"
               disabled={busy || uploading}
               onClick={() => publishSection(section)}
-              className="rounded bg-purple-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
             >
               {busy ? "Working..." : "Publish changes"}
             </button>
@@ -765,7 +866,7 @@ export default function AdminPage() {
                 type="button"
                 disabled={busy || uploading}
                 onClick={() => unpublishSection(section)}
-                className="rounded border border-red-500 px-4 py-2 text-red-600 disabled:opacity-50"
+                className="rounded-lg border border-[#e4b54a] bg-[#fff7e6] px-4 py-2 font-semibold text-[#8a5a00] transition hover:bg-[#ffefcc] disabled:opacity-50 dark:border-[#8c6925] dark:bg-[#3b2e13] dark:text-[#f6d27e] dark:hover:bg-[#493717]"
               >
                 Unpublish
               </button>
@@ -774,7 +875,7 @@ export default function AdminPage() {
               type="button"
               disabled={busy || uploading}
               onClick={() => removeSection(section)}
-              className="rounded border border-red-500 px-4 py-2 text-red-600 disabled:opacity-50"
+              className="rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-4 py-2 font-semibold text-[#b42318] transition hover:bg-[#ffe0e0] disabled:opacity-50 dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528]"
             >
               Delete section
             </button>
@@ -793,7 +894,7 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => addItem(section)}
-              className="rounded bg-purple-600 px-4 py-2 font-semibold text-white"
+              className="rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
             >
               Add{" "}
               {section === "projects"
@@ -823,6 +924,9 @@ export default function AdminPage() {
                   uploadFiles(event, section, item.id, "images", imageIndex)
                 }
                 onRemoveImage={(asset) => removeAsset(section, item, asset, "images")}
+                onRemoveLogo={(asset) =>
+                  removeAsset(section, item, asset, "organizationLogo")
+                }
                 onMoveImage={(index, direction) =>
                   shiftImage(section, item, index, direction)
                 }
@@ -836,6 +940,96 @@ export default function AdminPage() {
         </div>
       )}
     </section>
+  );
+}
+
+function AdminNotice({ tone = "info", children, onDismiss }) {
+  const styles = {
+    success:
+      "border-[#9bdcc8] bg-[#eaf8f2] text-[#11654f] dark:border-[#2d705f] dark:bg-[#123a31] dark:text-[#a7eed9]",
+    draft:
+      "border-[#9fd4de] bg-[#edf8fa] text-[#17687a] dark:border-[#28616d] dark:bg-[#12343b] dark:text-[#9de3ec]",
+    unpublished:
+      "border-[#e8ca85] bg-[#fff8e8] text-[#805a0c] dark:border-[#80652e] dark:bg-[#3b3018] dark:text-[#f6dc9a]",
+    info:
+      "border-[#9bdcc8] bg-[#eaf8f2] text-[#11654f] dark:border-[#2d705f] dark:bg-[#123a31] dark:text-[#a7eed9]",
+    error:
+      "border-[#efb2ad] bg-[#fff2f0] text-[#9f3026] dark:border-[#783c39] dark:bg-[#3a2020] dark:text-[#ffb9b2]",
+  };
+  const isError = tone === "error";
+
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      className={`mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm ${styles[tone] || styles.info}`}
+    >
+      <span
+        aria-hidden="true"
+        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-current"
+      />
+      <p className="min-w-0 flex-1 font-medium">{children}</p>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss notification"
+          className="rounded px-1 text-lg leading-4 opacity-70 transition hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-current"
+        >
+          &times;
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ContentStatusBadge({ item }) {
+  const status =
+    item.status === "draft"
+      ? item.published
+        ? "draftPublished"
+        : "draft"
+      : item.published
+        ? "published"
+        : ["unpublished", "unsaved"].includes(item.status)
+          ? item.status
+          : "unpublished";
+  const statuses = {
+    published: {
+      label: "Published",
+      className:
+        "bg-[#e6f7ef] text-[#14734f] dark:bg-[#153c30] dark:text-[#8de1ba]",
+    },
+    draft: {
+      label: "Draft saved",
+      className:
+        "bg-[#e8f6f7] text-[#176b76] dark:bg-[#12383d] dark:text-[#89dce3]",
+    },
+    draftPublished: {
+      label: "Draft saved · live published",
+      className:
+        "bg-[#e8f6f7] text-[#176b76] dark:bg-[#12383d] dark:text-[#89dce3]",
+    },
+    unpublished: {
+      label: "Unpublished",
+      className:
+        "bg-[#fff4df] text-[#8a5a00] dark:bg-[#3b3018] dark:text-[#f6d27e]",
+    },
+    unsaved: {
+      label: "Unsaved draft",
+      className:
+        "bg-[#eef2f1] text-[#596b67] dark:bg-white/10 dark:text-white/65",
+    },
+  };
+  const currentStatus = statuses[status];
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${currentStatus.className}`}
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+      {currentStatus.label}
+    </span>
   );
 }
 
@@ -857,7 +1051,7 @@ function TextField({
           required={required}
           value={value || ""}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded border border-gray-300 bg-transparent p-3"
+          className="w-full rounded-lg border border-[#cbd9d5] bg-white px-3 py-2.5 text-[#122126] outline-none transition focus:border-[#22a98a] focus:ring-2 focus:ring-[#22a98a]/20 dark:border-white/15 dark:bg-[#0b1c22] dark:text-white dark:focus:border-[#5be0bf] dark:focus:ring-[#5be0bf]/20"
         />
       ) : (
         <input
@@ -865,7 +1059,7 @@ function TextField({
           required={required}
           value={value || ""}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded border border-gray-300 bg-transparent p-3"
+          className="w-full rounded-lg border border-[#cbd9d5] bg-white px-3 py-2.5 text-[#122126] outline-none transition focus:border-[#22a98a] focus:ring-2 focus:ring-[#22a98a]/20 dark:border-white/15 dark:bg-[#0b1c22] dark:text-white dark:focus:border-[#5be0bf] dark:focus:ring-[#5be0bf]/20"
         />
       )}
     </label>
@@ -876,54 +1070,94 @@ function MediaField({
   label,
   asset,
   accept,
+  objectFit = "cover",
+  transparent = false,
   isPdf = false,
   busy,
   onUpload,
   onRemove,
 }) {
   return (
-    <div>
-      <span className="mb-1 block">{label}</span>
-      <div className="flex flex-wrap items-center gap-3">
-        {asset?.url && !isPdf && (
-          <PortfolioImage
-            url={asset.url}
-            alt={label}
-            className="h-20 w-20 rounded"
-          />
-        )}
-        {asset?.url && isPdf && (
-          <a
-            href={asset.url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-purple-600 underline"
-          >
-            Preview {asset.name || "CV PDF"}
-          </a>
-        )}
-        <label className="inline-flex cursor-pointer rounded border border-current px-4 py-2">
-          {asset ? "Replace" : "Upload"}
-          <input
-            type="file"
-            accept={accept}
-            className="sr-only"
-            disabled={busy}
-            onChange={onUpload}
-          />
-        </label>
-        {asset && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onRemove}
-            className="text-sm text-red-600"
-          >
-            Remove
-          </button>
-        )}
+    <div className="flex h-full flex-col">
+      <span className="mb-2 block font-medium">{label}</span>
+      <div className="flex min-h-[7rem] flex-wrap items-center justify-between gap-3 rounded-xl border border-[#dce7e4] bg-[#f7fbfa] p-3 dark:border-white/10 dark:bg-[#0b1c22]/70">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {asset?.url && !isPdf && (
+            <>
+              <PortfolioImage
+                url={asset.url}
+                alt={label}
+                objectFit={objectFit}
+                transparent={transparent}
+                className={`h-20 w-20 shrink-0 rounded-lg ${transparent ? "" : "ring-1 ring-[#cbd9d5] dark:ring-white/15"}`}
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-[#667779] dark:text-white/55">
+                  File name
+                </p>
+                <p
+                  title={asset.name || "Profile photo"}
+                  className="break-all text-sm font-medium text-[#122126] dark:text-white"
+                >
+                  {asset.name || "Profile photo"}
+                </p>
+              </div>
+            </>
+          )}
+          {asset?.url && isPdf && (
+            <a
+              href={asset.url}
+              target="_blank"
+              rel="noreferrer"
+              title={`Preview ${asset.name || "CV PDF"}`}
+              className="flex min-w-0 items-center gap-3 text-sm font-medium text-[#168e78] transition hover:text-[#0f766e] dark:text-[#5be0bf] dark:hover:text-[#a3f3df]"
+            >
+              <span
+                aria-hidden="true"
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[#e8f7f2] text-xs font-bold tracking-wide text-[#126d5b] dark:bg-[#123a34] dark:text-[#83e6ce]"
+              >
+                PDF
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-medium uppercase tracking-wide text-[#667779] dark:text-white/55">
+                  File name · click to preview
+                </span>
+                <span className="block break-all underline">
+                  {asset.name || "CV PDF"}
+                </span>
+              </span>
+            </a>
+          )}
+          {!asset?.url && (
+            <p className="text-sm text-[#667779] dark:text-white/60">
+              No file uploaded yet.
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-4 py-2 font-medium text-[#126d5b] transition hover:bg-[#d7f0e7] focus-within:ring-2 focus-within:ring-[#22a98a]/30 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f] dark:focus-within:ring-[#5be0bf]/30">
+            {asset ? "Replace" : "Upload"}
+            <input
+              type="file"
+              accept={accept}
+              className="sr-only"
+              disabled={busy}
+              onChange={onUpload}
+            />
+          </label>
+          {asset && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onRemove}
+              className="inline-flex items-center rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-3 py-2 text-sm font-medium text-[#b42318] transition hover:bg-[#ffe0e0] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b42318] dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528] dark:focus-visible:outline-[#ffaaa8]"
+            >
+              Remove
+            </button>
+          )}
+        </div>
       </div>
-      <p className="mt-2 text-sm text-gray-500">
+      <p className="mt-2 min-h-10 text-sm leading-5 text-gray-500 dark:text-gray-400">
         Removing or replacing only updates the portfolio; delete old files
         separately in Cloudinary Media Library.
       </p>
@@ -939,6 +1173,7 @@ function ItemEditor({
   onUpload,
   onReplaceImage,
   onRemoveImage,
+  onRemoveLogo,
   onMoveImage,
   onSave,
   onPublish,
@@ -951,14 +1186,12 @@ function ItemEditor({
   const itemType = isProject ? "project" : isExperience ? "experience" : "certificate";
 
   return (
-    <article className="space-y-4 rounded-xl border border-gray-200 p-5 dark:border-gray-700">
+    <article className="space-y-4 rounded-2xl border border-[#dce7e4] bg-white/70 p-5 shadow-sm dark:border-white/10 dark:bg-[#102127]/70">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">
           {item.title || `New ${itemType}`}
         </h3>
-        <span className="text-sm text-gray-500">
-          {item.published ? "Published" : "Draft / unpublished"}
-        </span>
+        <ContentStatusBadge item={item} />
       </div>
       <TextField
         label={isExperience ? "Role" : "Title"}
@@ -966,9 +1199,8 @@ function ItemEditor({
         value={item.title}
         onChange={(value) => onChange("title", value)}
       />
-      <TextField
+      <RichTextEditor
         label="Description"
-        multiline
         value={item.description}
         onChange={(value) => onChange("description", value)}
       />
@@ -999,6 +1231,42 @@ function ItemEditor({
             }
           />
         </>
+      ) : isExperience ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <MonthPicker
+            label="Start date"
+            required
+            value={item.startDate}
+            onChange={(value) => {
+              onChange("datePrecision", "month");
+              onChange("startDate", value);
+            }}
+          />
+          <MonthPicker
+            label="End date (optional)"
+            value={item.endDate}
+            onChange={(value) => {
+              onChange("datePrecision", "month");
+              onChange("endDate", value);
+            }}
+          />
+          <TextField
+            label="Organization"
+            value={item.organization}
+            onChange={(value) => onChange("organization", value)}
+            className="sm:col-span-2"
+          />
+          <p className="text-sm leading-6 text-[#667779] dark:text-white/60 sm:col-span-2">
+            Leave the end date blank for a current role. Multiple experiences
+            can be current at the same time.
+          </p>
+          {item.date && !item.startDate && (
+            <p className="text-sm leading-6 text-[#805a0c] dark:text-[#f6dc9a] sm:col-span-2">
+              Existing period: {item.date}. Select a start date to replace it
+              with the new date fields.
+            </p>
+          )}
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
@@ -1014,12 +1282,27 @@ function ItemEditor({
         </div>
       )}
 
+      {isExperience && (
+        <MediaField
+          label="Company logo (JPG, PNG, or WEBP; 5 MB max)"
+          asset={item.organizationLogo}
+          accept="image/jpeg,image/png,image/webp"
+          objectFit="contain"
+          transparent
+          busy={busy}
+          onUpload={(event) => onUpload(event, "organizationLogo", null)}
+          onRemove={() =>
+            item.organizationLogo && onRemoveLogo(item.organizationLogo)
+          }
+        />
+      )}
+
       {!isExperience && (
         <div>
           <span className="mb-2 block">
             Images (up to 4; JPG, PNG, or WEBP; 5 MB max each)
           </span>
-          <label className="inline-flex cursor-pointer rounded border border-current px-4 py-2">
+          <label className="inline-flex cursor-pointer rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-4 py-2 font-medium text-[#126d5b] transition hover:bg-[#d7f0e7] dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]">
             {images.length >= 4 ? "Image limit reached" : "Add images"}
             <input
               type="file"
@@ -1032,7 +1315,7 @@ function ItemEditor({
           </label>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {images.map((image, index) => (
-              <div key={image.publicId} className="space-y-2 rounded border border-gray-200 p-2 dark:border-gray-700">
+              <div key={image.publicId} className="space-y-2 rounded-lg border border-[#dce7e4] p-2 dark:border-white/10">
                 <PortfolioImage
                   url={image.url}
                   alt={`${item.title || itemType} image ${index + 1}`}
@@ -1045,6 +1328,7 @@ function ItemEditor({
                     disabled={busy || index === 0}
                     onClick={() => onMoveImage(index, -1)}
                     aria-label={`Move ${image.name || `image ${index + 1}`} earlier`}
+                    className="text-[#168e78] transition hover:text-[#0f766e] dark:text-[#5be0bf] dark:hover:text-[#a3f3df]"
                   >
                     Earlier
                   </button>
@@ -1053,6 +1337,7 @@ function ItemEditor({
                     disabled={busy || index === images.length - 1}
                     onClick={() => onMoveImage(index, 1)}
                     aria-label={`Move ${image.name || `image ${index + 1}`} later`}
+                    className="text-[#168e78] transition hover:text-[#0f766e] dark:text-[#5be0bf] dark:hover:text-[#a3f3df]"
                   >
                     Later
                   </button>
@@ -1065,7 +1350,7 @@ function ItemEditor({
                     Remove
                   </button>
                 </div>
-                <label className="inline-flex cursor-pointer rounded border border-current px-2 py-1 text-xs">
+                <label className="inline-flex cursor-pointer rounded-md border border-[#45b69a] bg-[#e8f7f2] px-2 py-1 text-xs font-medium text-[#126d5b] transition hover:bg-[#d7f0e7] dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]">
                   Replace
                   <input
                     type="file"
@@ -1081,12 +1366,12 @@ function ItemEditor({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+      <div className="flex flex-wrap gap-2 border-t border-[#dce7e4] pt-4 dark:border-white/10">
         <button
           type="button"
           disabled={busy}
           onClick={onSave}
-          className="rounded border border-current px-3 py-2 text-sm disabled:opacity-50"
+          className="rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-3 py-2 text-sm font-semibold text-[#126d5b] transition hover:bg-[#d7f0e7] disabled:opacity-50 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]"
         >
           Save draft
         </button>
@@ -1094,7 +1379,7 @@ function ItemEditor({
           type="button"
           disabled={busy}
           onClick={onPublish}
-          className="rounded bg-purple-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="rounded-lg bg-[#168e78] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
         >
           Publish
         </button>
@@ -1103,7 +1388,7 @@ function ItemEditor({
             type="button"
             disabled={busy}
             onClick={onUnpublish}
-            className="rounded border border-red-500 px-3 py-2 text-sm text-red-600 disabled:opacity-50"
+            className="rounded-lg border border-[#e4b54a] bg-[#fff7e6] px-3 py-2 text-sm font-semibold text-[#8a5a00] transition hover:bg-[#ffefcc] disabled:opacity-50 dark:border-[#8c6925] dark:bg-[#3b2e13] dark:text-[#f6d27e] dark:hover:bg-[#493717]"
           >
             Unpublish
           </button>
@@ -1112,7 +1397,7 @@ function ItemEditor({
           type="button"
           disabled={busy}
           onClick={onDelete}
-          className="ml-auto rounded border border-red-500 px-3 py-2 text-sm text-red-600 disabled:opacity-50"
+          className="ml-auto rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#ffe0e0] disabled:opacity-50 dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528]"
         >
           Delete
         </button>

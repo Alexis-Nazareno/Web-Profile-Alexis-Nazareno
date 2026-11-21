@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePortfolio } from "./PortfolioProvider";
+import { FooterSkeleton } from "./PortfolioSkeleton";
 
 const currentYear = new Date().getFullYear();
 
 export default function Footer() {
-  const { home, contact } = usePortfolio();
+  const { home, contact, loading } = usePortfolio();
+  if (loading) return <FooterSkeleton />;
+
   const mapLocation = contact.location;
 
   return (

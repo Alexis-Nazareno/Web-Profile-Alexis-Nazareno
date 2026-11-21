@@ -5,6 +5,10 @@ import { usePortfolio } from "./components/PortfolioProvider";
 import PortfolioCard from "./components/PortfolioCard";
 import PortfolioImage from "./components/PortfolioImage";
 import PortfolioFileLink from "./components/PortfolioFileLink";
+import VantaBirdsBackground from "./components/VantaBirdsBackground";
+import { HomeSkeleton } from "./components/PortfolioSkeleton";
+import RichTextContent from "./components/RichTextContent";
+import { formatExperienceDateRange } from "../lib/experienceDates";
 
 const skillTracks = [
   {
@@ -12,7 +16,14 @@ const skillTracks = [
     title: "Web applications",
     description:
       "Thoughtful, responsive interfaces that make everyday workflows easier to use.",
-    matches: ["Next.js", "React.js", "JavaScript", "HTML5", "CSS3", "Tailwind CSS"],
+    matches: [
+      "Next.js",
+      "React.js",
+      "JavaScript",
+      "HTML5",
+      "CSS3",
+      "Tailwind CSS",
+    ],
   },
   {
     number: "02",
@@ -46,14 +57,20 @@ function ArrowIcon() {
       stroke="currentColor"
       strokeWidth="1.7"
     >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 10h12m-5-5 5 5-5 5" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 10h12m-5-5 5 5-5 5"
+      />
     </svg>
   );
 }
 
 export default function HomePage() {
-  const { home, about, contact, projects, experience, achievements } =
+  const { home, about, contact, projects, experience, achievements, loading } =
     usePortfolio();
+  if (loading) return <HomeSkeleton />;
+
   const initials = (home.name || "AN")
     .split(/\s+/)
     .filter(Boolean)
@@ -64,23 +81,28 @@ export default function HomePage() {
   const location = about.location || contact.location || "Manila, Philippines";
   const skills = about.skills || [];
   const statistics = [
-    { value: projects.length, label: "Selected projects" },
-    { value: experience.length, label: "Work experiences" },
-    { value: achievements.length, label: "Training & certificates" },
+    { value: projects.length, label: "Selected projects", href: "/projects" },
+    { value: experience.length, label: "Work experiences", href: "/about" },
+    {
+      value: achievements.length,
+      label: "Training & Certificates",
+      href: "/achievements",
+    },
   ];
 
   return (
     <>
       <section className="relative overflow-hidden border-b border-[#e2ebe7] bg-[#f7faf9] dark:border-white/10 dark:bg-[#09171d]">
+        <VantaBirdsBackground />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-36 -top-32 h-[34rem] w-[34rem] rounded-full border border-[#d6ebe4] dark:border-white/5"
+          className="pointer-events-none absolute -right-36 -top-32 z-[1] h-[34rem] w-[34rem] rounded-full border border-[#d6ebe4] dark:border-white/5"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-20 -top-16 h-[28rem] w-[28rem] rounded-full border border-[#d6ebe4] dark:border-white/5"
+          className="pointer-events-none absolute -right-20 -top-16 z-[1] h-[28rem] w-[28rem] rounded-full border border-[#d6ebe4] dark:border-white/5"
         />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 py-16 sm:py-20 md:grid-cols-[1.08fr_0.92fr] md:px-8 md:py-24">
+        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-14 px-5 py-16 sm:py-20 md:grid-cols-[1.08fr_0.92fr] md:px-8 md:py-24">
           <div className="relative z-10">
             <p className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.26em] text-[#168e78] dark:text-[#5be0bf]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#39c5a4]" />
@@ -158,14 +180,24 @@ export default function HomePage() {
       <section className="border-b border-[#e3ece8] bg-white dark:border-white/10 dark:bg-[#0d1d23]">
         <div className="mx-auto grid max-w-6xl grid-cols-1 divide-y divide-[#e3ece8] px-5 sm:grid-cols-3 sm:divide-x sm:divide-y-0 md:px-8 dark:divide-white/10">
           {statistics.map((stat) => (
-            <div key={stat.label} className="flex items-center gap-4 py-6 sm:px-7 sm:py-7 first:sm:pl-0 last:sm:pr-0">
-              <span className="text-3xl font-semibold tracking-tight text-[#168e78] dark:text-[#5be0bf]">
+            <Link
+              key={stat.label}
+              href={stat.href}
+              className="group relative flex min-h-24 items-center justify-center gap-4 overflow-hidden px-4 py-5 transition-colors duration-300 hover:bg-[#f4fbf8] focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#168e78] motion-reduce:transition-none sm:px-7 sm:py-6 dark:hover:bg-white/[0.04] dark:focus-visible:outline-[#5be0bf]"
+            >
+              <span className="text-3xl font-semibold tracking-tight text-[#168e78] transition-transform duration-300 group-hover:scale-110 dark:text-[#5be0bf] motion-reduce:transition-none">
                 {String(stat.value).padStart(2, "0")}
               </span>
-              <span className="max-w-28 text-xs leading-5 text-[#6e7c7e] dark:text-white/55">
+              <span className="flex min-h-10 items-center whitespace-nowrap text-xs leading-5 text-[#6e7c7e] dark:text-white/55">
                 {stat.label}
               </span>
-            </div>
+              <span
+                aria-hidden="true"
+                className="absolute right-4 top-1/2 -translate-x-1 -translate-y-1/2 text-sm text-[#168e78] opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 dark:text-[#5be0bf] motion-reduce:transition-none"
+              >
+                ↗
+              </span>
+            </Link>
           ))}
         </div>
       </section>
@@ -268,18 +300,21 @@ export default function HomePage() {
                 key={item.id}
                 className="rounded-2xl border border-[#dce7e4] bg-white p-6 dark:border-white/10 dark:bg-[#102127] sm:p-8"
               >
-                <p className="text-xs font-medium text-[#168e78] dark:text-[#5be0bf]">
-                  {item.date}
-                </p>
+                {formatExperienceDateRange(item) && (
+                  <p className="text-xs font-medium text-[#168e78] dark:text-[#5be0bf]">
+                    {formatExperienceDateRange(item)}
+                  </p>
+                )}
                 <h3 className="mt-3 text-xl font-semibold text-[#183037] dark:text-white">
                   {item.title}
                 </h3>
                 <p className="mt-1 text-sm text-[#69797b] dark:text-white/50">
                   {item.organization}
                 </p>
-                <p className="mt-4 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-[#68797c] dark:text-white/60">
-                  {item.description}
-                </p>
+                <RichTextContent
+                  content={item.description}
+                  className="mt-4 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-[#68797c] dark:text-white/60"
+                />
               </article>
             ))}
           </div>

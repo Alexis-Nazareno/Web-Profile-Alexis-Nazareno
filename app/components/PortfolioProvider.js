@@ -17,6 +17,15 @@ import {
   defaultProjects,
 } from "../../lib/portfolio";
 
+const portfolioSources = [
+  "home",
+  "about",
+  "contact",
+  "projects",
+  "experience",
+  "achievements",
+];
+
 const PortfolioContext = createContext({
   home: defaultHome,
   about: defaultAbout,
@@ -25,6 +34,7 @@ const PortfolioContext = createContext({
   experience: [],
   achievements: defaultAchievements,
   error: "",
+  loading: false,
 });
 
 export function PortfolioProvider({ children }) {
@@ -35,17 +45,30 @@ export function PortfolioProvider({ children }) {
   const [experience, setExperience] = useState([]);
   const [achievements, setAchievements] = useState(defaultAchievements);
   const [errors, setErrors] = useState({});
+  const [pendingSources, setPendingSources] = useState(
+    () => new Set(isFirebaseConfigured ? portfolioSources : []),
+  );
+  const loading = pendingSources.size > 0;
   const error = Object.values(errors).join(" ");
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
 
+    const markSourceSettled = (source) => {
+      setPendingSources((current) => {
+        if (!current.has(source)) return current;
+        const next = new Set(current);
+        next.delete(source);
+        return next;
+      });
+    };
     const reportError = (source) => (snapshotError) => {
       console.error(`Could not load published ${source}:`, snapshotError);
       setErrors((current) => ({
         ...current,
         [source]: "Live portfolio content could not be loaded.",
       }));
+      markSourceSettled(source);
     };
     const clearError = (source) => {
       setErrors((current) => {
@@ -63,6 +86,7 @@ export function PortfolioProvider({ children }) {
           setHome({ ...defaultHome, ...snapshot.data() });
         }
         clearError("home");
+        markSourceSettled("home");
       },
       reportError("home"),
     );
@@ -71,6 +95,7 @@ export function PortfolioProvider({ children }) {
       (snapshot) => {
         if (snapshot.exists()) setAbout({ ...defaultAbout, ...snapshot.data() });
         clearError("about");
+        markSourceSettled("about");
       },
       reportError("about"),
     );
@@ -86,6 +111,7 @@ export function PortfolioProvider({ children }) {
           setContact({ ...defaultContact, ...safeContact });
         }
         clearError("contact");
+        markSourceSettled("contact");
       },
       reportError("contact"),
     );
@@ -94,6 +120,7 @@ export function PortfolioProvider({ children }) {
       (snapshot) => {
         setProjects(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
         clearError("projects");
+        markSourceSettled("projects");
       },
       reportError("projects"),
     );
@@ -104,6 +131,7 @@ export function PortfolioProvider({ children }) {
           snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
         );
         clearError("achievements");
+        markSourceSettled("achievements");
       },
       reportError("achievements"),
     );
@@ -114,6 +142,7 @@ export function PortfolioProvider({ children }) {
           snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
         );
         clearError("experience");
+        markSourceSettled("experience");
       },
       reportError("experience"),
     );
@@ -130,7 +159,16 @@ export function PortfolioProvider({ children }) {
 
   return (
     <PortfolioContext.Provider
-      value={{ home, about, contact, projects, experience, achievements, error }}
+      value={{
+        home,
+        about,
+        contact,
+        projects,
+        experience,
+        achievements,
+        error,
+        loading,
+      }}
     >
       {error && (
         <p
