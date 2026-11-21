@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePortfolio } from "./PortfolioProvider";
 import DarkModeToggle from "./DarkModeToggle";
+import PortfolioImage from "./PortfolioImage";
+import { NavbarSkeleton } from "./PortfolioSkeleton";
 
 const links = [
   ["About", "/about"],
@@ -14,7 +16,9 @@ const links = [
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { home } = usePortfolio();
+  const { home, loading } = usePortfolio();
+  if (loading) return <NavbarSkeleton />;
+
   const initials = (home.name || "Portfolio")
     .split(/\s+/)
     .filter(Boolean)
@@ -42,12 +46,16 @@ export default function Navbar() {
       >
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-3"
+          className="group flex min-w-0 items-center gap-3"
           onClick={() => setMenuOpen(false)}
         >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#4ed8b6]/50 bg-[#102a30] text-sm font-bold tracking-wide text-[#67e1c2]">
-            {initials}
-          </span>
+          <PortfolioImage
+            url={home.photo?.url}
+            alt={`${home.name} profile`}
+            fallbackText={initials}
+            fallbackClassName="text-sm font-bold tracking-wide text-[#67e1c2]"
+            className="h-10 w-10 shrink-0 rounded-xl border border-[#4ed8b6]/50 transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
+          />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold tracking-wide text-white">
               {home.name}

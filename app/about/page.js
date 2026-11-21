@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { usePortfolio } from "../components/PortfolioProvider";
+import PortfolioImage from "../components/PortfolioImage";
 import SectionHeading from "../components/SectionHeading";
+import { AboutSkeleton } from "../components/PortfolioSkeleton";
+import RichTextContent from "../components/RichTextContent";
+import { formatExperienceDateRange } from "../../lib/experienceDates";
 
 export default function AboutPage() {
-  const { home, about, experience } = usePortfolio();
+  const { home, about, experience, loading } = usePortfolio();
+  if (loading) return <AboutSkeleton />;
+
   const details = [
     ["Current role", about.position],
     ["Education", about.education],
@@ -88,34 +94,52 @@ export default function AboutPage() {
             </Link>
           </div>
           <div className="relative ml-2 border-l border-[#b8d9cf] pl-7 dark:border-white/15 sm:ml-4 sm:pl-10">
-            {experience.map((item) => (
-              <article key={item.id} className="relative pb-10 last:pb-0">
-                <span
-                  aria-hidden="true"
-                  className="absolute -left-[2.13rem] top-1.5 h-3 w-3 rounded-full border-[3px] border-[#f7faf9] bg-[#23a98c] dark:border-[#09171d] sm:-left-[2.88rem]"
-                />
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="text-xl font-semibold text-[#1a3035] dark:text-white">
-                    {item.title}
-                  </h3>
-                  {item.date && (
-                    <span className="text-xs font-medium text-[#168e78] dark:text-[#5be0bf]">
-                      {item.date}
-                    </span>
+            {experience.map((item) => {
+              const dateRange = formatExperienceDateRange(item);
+
+              return (
+                <article key={item.id} className="relative pb-10 last:pb-0">
+                  <span
+                    aria-hidden="true"
+                    className="absolute -left-[2.13rem] top-1.5 h-3 w-3 rounded-full border-[3px] border-[#f7faf9] bg-[#23a98c] dark:border-[#09171d] sm:-left-[2.88rem]"
+                  />
+                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-xl font-semibold text-[#1a3035] dark:text-white">
+                        {item.title}
+                      </h3>
+                      {item.organization && (
+                        <p className="mt-1 text-sm font-medium text-[#637578] dark:text-white/55">
+                          {item.organization}
+                        </p>
+                      )}
+                    </div>
+                    <div className="ml-auto flex shrink-0 flex-col items-end gap-2">
+                      {item.organizationLogo?.url && (
+                        <PortfolioImage
+                          url={item.organizationLogo.url}
+                          alt={`${item.organization || "Company"} logo`}
+                          objectFit="contain"
+                          transparent
+                          className="h-12 w-12"
+                        />
+                      )}
+                      {dateRange && (
+                        <span className="text-right text-xs font-medium text-[#168e78] dark:text-[#5be0bf]">
+                          {dateRange}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {item.description && (
+                    <RichTextContent
+                      content={item.description}
+                      className="mt-4 max-w-3xl whitespace-pre-wrap text-sm leading-7 text-[#68797c] dark:text-white/65"
+                    />
                   )}
-                </div>
-                {item.organization && (
-                  <p className="mt-1 text-sm font-medium text-[#637578] dark:text-white/55">
-                    {item.organization}
-                  </p>
-                )}
-                {item.description && (
-                  <p className="mt-4 max-w-3xl whitespace-pre-wrap text-sm leading-7 text-[#68797c] dark:text-white/65">
-                    {item.description}
-                  </p>
-                )}
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
       )}

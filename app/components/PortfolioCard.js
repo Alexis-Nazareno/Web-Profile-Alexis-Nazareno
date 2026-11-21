@@ -1,6 +1,7 @@
 "use client";
 
 import PortfolioImage from "./PortfolioImage";
+import RichTextContent from "./RichTextContent";
 
 export default function PortfolioCard({ item, kind = "project" }) {
   const images = item.images || [];
@@ -51,9 +52,10 @@ export default function PortfolioCard({ item, kind = "project" }) {
           {item.title}
         </h2>
         {item.description && (
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#66777b] dark:text-white/65">
-            {item.description}
-          </p>
+          <RichTextContent
+            content={item.description}
+            className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#66777b] dark:text-white/65"
+          />
         )}
         {item.technologies?.length > 0 && (
           <ul className="mt-5 flex flex-wrap gap-2">

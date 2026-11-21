@@ -8,6 +8,9 @@ export default function PortfolioImage({
   alt,
   className = "",
   fallbackText = "AN",
+  fallbackClassName = "text-5xl font-semibold tracking-tight",
+  objectFit = "cover",
+  transparent = false,
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -30,7 +33,7 @@ export default function PortfolioImage({
           aria-hidden="true"
           className="absolute -bottom-16 -left-10 h-48 w-48 rounded-full border border-current/10"
         />
-        <span className="relative text-5xl font-semibold tracking-tight">
+        <span className={`relative ${fallbackClassName}`}>
           {fallbackText}
         </span>
       </div>
@@ -41,7 +44,7 @@ export default function PortfolioImage({
     <div
       role="img"
       aria-label={alt}
-      className={`relative overflow-hidden bg-[#dceee9] dark:bg-[#16332f] ${className}`}
+      className={`relative overflow-hidden ${transparent ? "" : "bg-[#dceee9] dark:bg-[#16332f]"} ${className}`}
     >
       <Image
         src={url}
@@ -49,7 +52,7 @@ export default function PortfolioImage({
         fill
         unoptimized
         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 40vw"
-        className="object-cover"
+        className={objectFit === "contain" ? "object-contain" : "object-cover"}
         onError={() => setFailed(true)}
       />
     </div>

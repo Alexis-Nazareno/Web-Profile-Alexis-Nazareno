@@ -3,9 +3,11 @@
 import { usePortfolio } from "../components/PortfolioProvider";
 import PortfolioCard from "../components/PortfolioCard";
 import SectionHeading from "../components/SectionHeading";
+import { ProjectsSkeleton } from "../components/PortfolioSkeleton";
 
 export default function ProjectsPage() {
-  const { projects } = usePortfolio();
+  const { projects, loading } = usePortfolio();
+  if (loading) return <ProjectsSkeleton />;
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 md:px-8 md:py-24">
