@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import {
   collection,
+  doc,
+  getDoc,
+  getDocs,
   onSnapshot,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   onAuthStateChanged,
@@ -45,6 +52,7 @@ const tabs = [
   ["experience", "Experience"],
   ["projects", "Projects"],
   ["achievements", "Training & Certificates"],
+  ["feedback", "Feedback"],
 ];
 
 const itemLabels = {
@@ -52,6 +60,170 @@ const itemLabels = {
   experience: "Experience",
   achievements: "Training / Certificate",
 };
+
+const pendingCloudinaryDeletionsKey = "portfolio-pending-cloudinary-deletions";
+
+async function deleteFeedbackLikes(database, feedbackId) {
+  const likesSnapshot = await getDocs(
+    collection(database, "publicFeedback", feedbackId, "likes"),
+  );
+
+  for (let index = 0; index < likesSnapshot.docs.length; index += 450) {
+    const batch = writeBatch(database);
+    likesSnapshot.docs
+      .slice(index, index + 450)
+      .forEach((like) => batch.delete(like.ref));
+    await batch.commit();
+  }
+}
+
+function getCloudinaryAssetEntries(content) {
+  return [
+    { asset: content?.photo, resourceType: "image" },
+    { asset: content?.resume, resourceType: "raw" },
+    { asset: content?.organizationLogo, resourceType: "image" },
+    ...(Array.isArray(content?.images)
+      ? content.images.map((asset) => ({ asset, resourceType: "image" }))
+      : []),
+  ].filter(({ asset }) => asset);
+}
+
+function normalizeCloudinaryDeletionAssets(assetEntries) {
+  const uniqueAssets = new Map();
+  for (const { asset, resourceType: fallbackResourceType } of assetEntries) {
+    const publicId = asset.publicId || asset.id;
+    const resourceType = asset.resourceType || fallbackResourceType;
+    if (
+      typeof publicId !== "string" ||
+      !publicId ||
+      !["image", "raw"].includes(resourceType)
+    ) {
+      throw new Error("This file is missing Cloudinary deletion information.");
+    }
+
+    uniqueAssets.set(`${resourceType}:${publicId}`, { publicId, resourceType });
+  }
+
+  return Array.from(uniqueAssets.values());
+}
+
+function readPendingCloudinaryDeletions() {
+  const stored = window.localStorage.getItem(pendingCloudinaryDeletionsKey);
+  if (!stored) return [];
+
+  const pending = JSON.parse(stored);
+  if (
+    !Array.isArray(pending) ||
+    pending.some(
+      (asset) =>
+        typeof asset.publicId !== "string" ||
+        !asset.publicId ||
+        !["image", "raw"].includes(asset.resourceType),
+    )
+  ) {
+    throw new Error("The browser's pending Cloudinary cleanup data is invalid.");
+  }
+  return pending;
+}
+
+function rememberPendingCloudinaryDeletions(assets) {
+  const current = readPendingCloudinaryDeletions();
+  const merged = new Map(
+    current.map((asset) => [
+      `${asset.resourceType}:${asset.publicId}`,
+      asset,
+    ]),
+  );
+  assets.forEach((asset) =>
+    merged.set(`${asset.resourceType}:${asset.publicId}`, asset),
+  );
+  window.localStorage.setItem(
+    pendingCloudinaryDeletionsKey,
+    JSON.stringify(Array.from(merged.values())),
+  );
+}
+
+function clearPendingCloudinaryDeletions() {
+  window.localStorage.removeItem(pendingCloudinaryDeletionsKey);
+}
+
+async function enqueueCloudinaryDeletions(assetEntries) {
+  const assets = normalizeCloudinaryDeletionAssets(assetEntries);
+  await Promise.all(
+    assets.map((asset) =>
+      setDoc(
+        doc(
+          db,
+          "cloudinaryDeletionQueue",
+          encodeURIComponent(`${asset.resourceType}:${asset.publicId}`),
+        ),
+        { ...asset, queuedAt: serverTimestamp() },
+        { merge: true },
+      ),
+    ),
+  );
+}
+
+async function retryPendingCloudinaryDeletions() {
+  const pending = readPendingCloudinaryDeletions();
+  if (!pending.length) return;
+
+  await enqueueCloudinaryDeletions(
+    pending.map((asset) => ({ asset, resourceType: asset.resourceType })),
+  );
+  clearPendingCloudinaryDeletions();
+}
+
+async function processCloudinaryDeletionQueue() {
+  const queuedAssets = await getDocs(collection(db, "cloudinaryDeletionQueue"));
+  if (queuedAssets.empty) return null;
+  if (!auth?.currentUser) {
+    throw new Error("Sign in as the portfolio admin to clean up Cloudinary files.");
+  }
+
+  const token = await auth.currentUser.getIdToken();
+  const response = await fetch("/api/cloudinary/deletions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error("The Cloudinary cleanup service returned an unreadable response.");
+  }
+  if (!response.ok) {
+    throw new Error(result.error || `Cloudinary cleanup failed (${response.status}).`);
+  }
+
+  return result;
+}
+
+function getCloudinaryCleanupMessage(result) {
+  if (!result) return "";
+  const messages = [];
+  if (result.deletedCount) {
+    messages.push(
+      `${result.deletedCount} Cloudinary file${result.deletedCount === 1 ? "" : "s"} permanently deleted.`,
+    );
+  }
+  if (result.deferredCount) {
+    messages.push(
+      `${result.deferredCount} file${result.deferredCount === 1 ? "" : "s"} still referenced by saved or published content; cleanup will retry after those references are removed.`,
+    );
+  }
+  return messages.length ? ` ${messages.join(" ")}` : "";
+}
+
+function getCloudinaryCleanupErrorMessage(error) {
+  if (
+    error.code === "permission-denied" ||
+    error.message?.includes("Missing or insufficient permissions")
+  ) {
+    return "Cloudinary cleanup needs the updated Firestore rules. Publish firestore.rules in Firebase Console, then save again.";
+  }
+  return `Cloudinary cleanup is pending: ${error.message}`;
+}
 
 const newItem = (section, order) => ({
   id: crypto.randomUUID(),
@@ -84,6 +256,8 @@ export default function AdminPage() {
     projects: [],
     achievements: [],
   });
+  const [feedbackSubmissions, setFeedbackSubmissions] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -117,6 +291,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!user || !db) return;
 
+    setFeedbackLoading(true);
     const unsubscribeSections = onSnapshot(
       collection(db, "draftContent"),
       (snapshot) => {
@@ -235,22 +410,60 @@ export default function AdminPage() {
         setError(snapshotError.message);
       },
     );
+    const unsubscribeFeedback = onSnapshot(
+      collection(db, "feedbackInbox"),
+      (snapshot) => {
+        setFeedbackSubmissions(
+          snapshot.docs
+            .map((item) => ({ id: item.id, ...item.data() }))
+            .sort(
+              (left, right) =>
+                (right.submittedAt?.seconds || 0) -
+                (left.submittedAt?.seconds || 0),
+            ),
+        );
+        setFeedbackLoading(false);
+      },
+      (snapshotError) => {
+        console.error("Could not load feedback submissions:", snapshotError);
+        setFeedbackLoading(false);
+        setError(snapshotError.message);
+      },
+    );
 
     return () => {
       unsubscribeSections();
       unsubscribeProjects();
       unsubscribeExperience();
       unsubscribeAchievements();
+      unsubscribeFeedback();
     };
   }, [user]);
 
-  const runAction = async (action, successMessage, tone = "success") => {
+  const runAction = async (
+    action,
+    successMessage,
+    tone = "success",
+    cleanupCloudinary = false,
+  ) => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
       await action();
-      setMessage(successMessage);
+      let cleanupMessage = "";
+      if (cleanupCloudinary) {
+        try {
+          await retryPendingCloudinaryDeletions();
+          cleanupMessage = getCloudinaryCleanupMessage(
+            await processCloudinaryDeletionQueue(),
+          );
+        } catch (cleanupError) {
+          console.error("Cloudinary cleanup is pending:", cleanupError);
+          cleanupMessage = ` ${getCloudinaryCleanupErrorMessage(cleanupError)}`;
+        }
+      }
+      setMessage(`${successMessage}${cleanupMessage}`);
       setMessageTone(tone);
     } catch (actionError) {
       console.error("Portfolio admin action failed:", actionError);
@@ -311,6 +524,13 @@ export default function AdminPage() {
       ? null
       : items[section].find((candidate) => candidate.id === itemId);
     const currentImages = item?.images || [];
+    const replacedAsset = isHomeMedia
+      ? sections.home[field]
+      : isExperienceLogo
+        ? item?.[field]
+        : Number.isInteger(targetImageIndex)
+          ? currentImages[targetImageIndex]
+          : null;
     if (
       (isHomeMedia ||
         isExperienceLogo ||
@@ -334,6 +554,34 @@ export default function AdminPage() {
     setError("");
     setMessage("");
     try {
+      let cleanupWarning = "";
+      if (replacedAsset) {
+        const deletionEntries = [
+          {
+            asset: replacedAsset,
+            resourceType: field === "resume" ? "raw" : "image",
+          },
+        ];
+        try {
+          await enqueueCloudinaryDeletions(deletionEntries);
+        } catch (queueError) {
+          console.error("Could not queue replaced Cloudinary asset:", queueError);
+          try {
+            rememberPendingCloudinaryDeletions(
+              normalizeCloudinaryDeletionAssets(deletionEntries),
+            );
+            cleanupWarning =
+              " The old file is saved in this browser's cleanup retry list. Publish the updated Firestore rules, then save the content to retry.";
+          } catch (storageError) {
+            console.error(
+              "Could not preserve pending Cloudinary cleanup in this browser:",
+              storageError,
+            );
+            cleanupWarning =
+              " The replacement can continue, but the old file could not be queued for Cloudinary cleanup.";
+          }
+        }
+      }
       const uploadedAssets = await uploadCloudinaryFiles(files);
       if (isHomeMedia) {
         updateSection("home", field, uploadedAssets[0]);
@@ -352,7 +600,7 @@ export default function AdminPage() {
         }
       }
       setMessage(
-        `${uploadedAssets.length} file${uploadedAssets.length === 1 ? "" : "s"} uploaded.`,
+        `${uploadedAssets.length} file${uploadedAssets.length === 1 ? "" : "s"} uploaded.${cleanupWarning}`,
       );
       setMessageTone("success");
     } catch (uploadError) {
@@ -369,10 +617,10 @@ export default function AdminPage() {
     }
   };
 
-  const removeAsset = (section, item, asset, field) => {
+  const removeAsset = async (section, item, asset, field) => {
     if (
       !window.confirm(
-        "Remove this file from the portfolio? The Cloudinary asset remains in your account because unsigned uploads cannot delete remote files.",
+        "Remove this file from the portfolio? It will be deleted from Cloudinary once no saved or published content uses it.",
       )
     ) {
       return;
@@ -380,6 +628,37 @@ export default function AdminPage() {
 
     setError("");
     setMessage("");
+    let cleanupWarning = "";
+    try {
+      await enqueueCloudinaryDeletions([
+        {
+          asset,
+          resourceType: field === "resume" ? "raw" : "image",
+        },
+      ]);
+    } catch (queueError) {
+      console.error("Could not queue Cloudinary asset for deletion:", queueError);
+      try {
+        rememberPendingCloudinaryDeletions(
+          normalizeCloudinaryDeletionAssets([
+            {
+              asset,
+              resourceType: field === "resume" ? "raw" : "image",
+            },
+          ]),
+        );
+        cleanupWarning =
+          " The file is saved in this browser's cleanup retry list. Publish the updated Firestore rules, then save the content to retry.";
+      } catch (storageError) {
+        console.error(
+          "Could not preserve pending Cloudinary cleanup in this browser:",
+          storageError,
+        );
+        cleanupWarning =
+          " The file was removed from the draft, but automatic Cloudinary cleanup could not be queued.";
+      }
+    }
+
     if (section === "home") {
       updateSection("home", field, null);
     } else if (field === "organizationLogo") {
@@ -389,10 +668,25 @@ export default function AdminPage() {
         section,
         item.id,
         "images",
-        item.images.filter((currentAsset) => currentAsset.publicId !== asset.publicId),
+        item.images.filter(
+          (currentAsset) => currentAsset.publicId !== asset.publicId,
+        ),
       );
     }
-    setMessage("File removed from the draft. Save or publish to update the site.");
+
+    if (!cleanupWarning) {
+      try {
+        cleanupWarning = getCloudinaryCleanupMessage(
+          await processCloudinaryDeletionQueue(),
+        );
+      } catch (cleanupError) {
+        console.error("Cloudinary cleanup is pending:", cleanupError);
+        cleanupWarning = ` ${getCloudinaryCleanupErrorMessage(cleanupError)}`;
+      }
+    }
+    setMessage(
+      `File removed from the draft. Save or publish to update the site.${cleanupWarning}`,
+    );
     setMessageTone("draft");
   };
 
@@ -418,6 +712,7 @@ export default function AdminPage() {
       () => saveDraft(section, content),
       `${sectionName} draft saved.${content.published ? " The published version remains live." : ""}`,
       "draft",
+      true,
     );
   };
 
@@ -431,6 +726,7 @@ export default function AdminPage() {
       () => publishDraft(section, content),
       `${tabs.find(([id]) => id === section)?.[1]} section published.`,
       "success",
+      true,
     );
   };
 
@@ -440,13 +736,14 @@ export default function AdminPage() {
       () => unpublishDraft(section, content),
       `${tabs.find(([id]) => id === section)?.[1]} section unpublished.`,
       "unpublished",
+      true,
     );
   };
 
   const removeSection = (section) => {
     if (
       !window.confirm(
-        `Delete the ${section} section and its media references? Cloudinary files will remain in your account.`,
+        `Delete the ${section} section and its media? Cloudinary files will be deleted only when no other saved or published content uses them.`,
       )
     ) {
       return;
@@ -454,12 +751,13 @@ export default function AdminPage() {
 
     const content = { id: section, ...sections[section] };
     void runAction(async () => {
+      await enqueueCloudinaryDeletions(getCloudinaryAssetEntries(content));
       await deleteContent(section, content);
       setSections((current) => ({
         ...current,
         [section]: { ...defaultSections[section] },
       }));
-    }, `${section} section deleted.`);
+    }, `${section} section deleted.`, "success", true);
   };
 
   const addItem = (section) => {
@@ -509,6 +807,7 @@ export default function AdminPage() {
       () => saveDraft(section, content),
       `${itemLabels[section]} draft saved.${content.published ? " The published version remains live." : ""}`,
       "draft",
+      true,
     );
   };
 
@@ -519,6 +818,7 @@ export default function AdminPage() {
       () => publishDraft(section, content),
       `${itemLabels[section]} published.`,
       "success",
+      true,
     );
   };
 
@@ -527,21 +827,69 @@ export default function AdminPage() {
       () => unpublishDraft(section, item),
       `${itemLabels[section]} unpublished.`,
       "unpublished",
+      true,
     );
 
   const removeItem = (section, item) => {
     if (
       !window.confirm(
-        `Delete "${item.title}" from the portfolio? Its Cloudinary assets will remain in your account.`,
+        `Delete "${item.title}" from the portfolio? Its Cloudinary files will be deleted only when no other saved or published content uses them.`,
       )
     ) {
       return;
     }
 
-    void runAction(
-      () => deleteContent(section, item),
-      `${itemLabels[section]} deleted.`,
-    );
+    void runAction(async () => {
+      await enqueueCloudinaryDeletions(getCloudinaryAssetEntries(item));
+      await deleteContent(section, item);
+    }, `${itemLabels[section]} deleted.`, "success", true);
+  };
+
+  const publishFeedback = (item) =>
+    void runAction(async () => {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "publicFeedback", item.id), {
+        name: item.name || "Anonymous",
+        role: item.role || "",
+        message: item.message,
+        publishedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, "feedbackInbox", item.id), {
+        status: "published",
+        publishedAt: serverTimestamp(),
+      });
+      await batch.commit();
+    }, "Feedback published on the homepage.");
+
+  const unpublishFeedback = (item) =>
+    void runAction(async () => {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "publicFeedback", item.id));
+      batch.update(doc(db, "feedbackInbox", item.id), {
+        status: "unpublished",
+        unpublishedAt: serverTimestamp(),
+      });
+      await batch.commit();
+    }, "Feedback removed from the homepage.");
+
+  const deleteFeedback = (item) => {
+    if (!window.confirm(`Delete feedback from "${item.name || "Anonymous"}"?`)) {
+      return;
+    }
+
+    void runAction(async () => {
+      const publicFeedbackRef = doc(db, "publicFeedback", item.id);
+      const publicFeedbackSnapshot = await getDoc(publicFeedbackRef);
+      if (publicFeedbackSnapshot.exists()) {
+        await updateDoc(publicFeedbackRef, { likesDisabled: true });
+      }
+      await deleteFeedbackLikes(db, item.id);
+
+      const batch = writeBatch(db);
+      batch.delete(publicFeedbackRef);
+      batch.delete(doc(db, "feedbackInbox", item.id));
+      await batch.commit();
+    }, "Feedback deleted.");
   };
 
   const importCv = () => {
@@ -728,7 +1076,16 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {sectionData ? (
+      {section === "feedback" ? (
+        <FeedbackManager
+          items={feedbackSubmissions}
+          loading={feedbackLoading}
+          busy={busy}
+          onPublish={publishFeedback}
+          onUnpublish={unpublishFeedback}
+          onDelete={deleteFeedback}
+        />
+      ) : sectionData ? (
         <div className="space-y-6">
           <div>
             <h2 className="text-2xl font-semibold">
@@ -940,6 +1297,178 @@ export default function AdminPage() {
         </div>
       )}
     </section>
+  );
+}
+
+function FeedbackManager({
+  items,
+  loading,
+  busy,
+  onPublish,
+  onUnpublish,
+  onDelete,
+}) {
+  const [filter, setFilter] = useState("pending");
+  const pendingCount = items.filter(
+    (item) => !["published", "unpublished"].includes(item.status),
+  ).length;
+  const publishedCount = items.filter(
+    (item) => item.status === "published",
+  ).length;
+  const unpublishedCount = items.filter(
+    (item) => item.status === "unpublished",
+  ).length;
+  const counts = {
+    all: items.length,
+    pending: pendingCount,
+    published: publishedCount,
+    unpublished: unpublishedCount,
+  };
+  const filters = [
+    ["pending", "Pending"],
+    ["published", "Published"],
+    ["unpublished", "Unpublished"],
+    ["all", "All"],
+  ];
+  const visibleItems =
+    filter === "all"
+      ? items
+      : items.filter((item) =>
+          filter === "pending"
+            ? !["published", "unpublished"].includes(item.status)
+            : item.status === filter,
+        );
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-2xl font-semibold">Feedback inbox</h2>
+        <p className="mt-1 text-sm text-[#667779] dark:text-white/55">
+          Review submissions here. Only feedback you publish is shown on the homepage.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {filters.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={filter === id}
+            onClick={() => setFilter(id)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              filter === id
+                ? "border-[#168e78] bg-[#eaf8f2] text-[#11654f] dark:border-[#5be0bf] dark:bg-[#123a31] dark:text-[#a7eed9]"
+                : "border-[#dce7e4] text-[#5b6d70] hover:border-[#9bdcc8] dark:border-white/10 dark:text-white/65 dark:hover:border-[#2d705f]"
+            }`}
+          >
+            {label} <span className="ml-1 text-xs opacity-70">{counts[id]}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div
+          aria-label="Loading feedback submissions"
+          className="grid gap-4"
+        >
+          {[0, 1].map((item) => (
+            <div
+              key={item}
+              className="h-36 animate-pulse rounded-2xl border border-[#dce7e4] bg-white/70 dark:border-white/10 dark:bg-white/5"
+            />
+          ))}
+        </div>
+      ) : visibleItems.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-[#cbd9d5] px-5 py-8 text-center text-sm text-[#667779] dark:border-white/15 dark:text-white/55">
+          {items.length === 0
+            ? "No feedback submissions yet."
+            : `No ${filter} feedback.`}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {visibleItems.map((item) => {
+            const published = item.status === "published";
+            const unpublished = item.status === "unpublished";
+            const statusClass = published
+              ? "bg-[#e6f7ef] text-[#14734f] dark:bg-[#153c30] dark:text-[#8de1ba]"
+              : unpublished
+                ? "bg-[#e8f6f7] text-[#176b76] dark:bg-[#12383d] dark:text-[#89dce3]"
+                : "bg-[#fff4df] text-[#8a5a00] dark:bg-[#3b3018] dark:text-[#f6d27e]";
+            const submittedDate = item.submittedAt?.toDate?.();
+            const dateLabel = submittedDate
+              ? new Intl.DateTimeFormat("en-US", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(submittedDate)
+              : "Submission date unavailable";
+
+            return (
+              <article
+                key={item.id}
+                className="rounded-2xl border border-[#dce7e4] bg-white/70 p-5 shadow-sm dark:border-white/10 dark:bg-[#102127]/70"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-[#183037] dark:text-white">
+                      {item.name || "Anonymous"}
+                    </h3>
+                    {item.role && (
+                      <p className="mt-0.5 text-sm text-[#68797c] dark:text-white/55">
+                        {item.role}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}
+                  >
+                    {published
+                      ? "Published"
+                      : unpublished
+                        ? "Unpublished"
+                        : "Pending review"}
+                  </span>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[#52676a] dark:text-white/70">
+                  {item.message}
+                </p>
+                <p className="mt-3 text-xs text-[#81908e] dark:text-white/40">
+                  {dateLabel}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-[#e5eeea] pt-4 dark:border-white/10">
+                  {published ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onUnpublish(item)}
+                      className="rounded-lg border border-[#e4b54a] bg-[#fff7e6] px-3 py-2 text-sm font-semibold text-[#8a5a00] transition hover:bg-[#ffefcc] disabled:opacity-50 dark:border-[#8c6925] dark:bg-[#3b2e13] dark:text-[#f6d27e] dark:hover:bg-[#493717]"
+                    >
+                      Unpublish
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onPublish(item)}
+                      className="rounded-lg bg-[#168e78] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
+                    >
+                      Publish on homepage
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onDelete(item)}
+                    className="rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#ffe0e0] disabled:opacity-50 dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528]"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1158,8 +1687,8 @@ function MediaField({
         </div>
       </div>
       <p className="mt-2 min-h-10 text-sm leading-5 text-gray-500 dark:text-gray-400">
-        Removing or replacing only updates the portfolio; delete old files
-        separately in Cloudinary Media Library.
+        Removed or replaced files are queued for Cloudinary cleanup after no
+        saved or published content uses them.
       </p>
     </div>
   );

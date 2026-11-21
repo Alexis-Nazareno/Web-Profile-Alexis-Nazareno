@@ -5,6 +5,7 @@ import { usePortfolio } from "./components/PortfolioProvider";
 import PortfolioCard from "./components/PortfolioCard";
 import PortfolioImage from "./components/PortfolioImage";
 import PortfolioFileLink from "./components/PortfolioFileLink";
+import FeedbackSection from "./components/FeedbackSection";
 import VantaBirdsBackground from "./components/VantaBirdsBackground";
 import { HomeSkeleton } from "./components/PortfolioSkeleton";
 import RichTextContent from "./components/RichTextContent";
@@ -358,6 +359,8 @@ export default function HomePage() {
           </div>
         </section>
       )}
+
+      <FeedbackSection />
 
       <section className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
         <div className="relative overflow-hidden rounded-[2rem] bg-[#102a30] px-6 py-12 text-white sm:px-10 md:px-14 md:py-16">

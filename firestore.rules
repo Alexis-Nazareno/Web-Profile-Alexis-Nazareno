@@ -6,6 +6,33 @@ service cloud.firestore {
         && request.auth.uid == '8LGxmtgTk0Z7Ad6ofDLobg36Nh73';
     }
 
+    function isValidFeedbackSubmission() {
+      return request.resource.data.keys().hasAll([
+          'name',
+          'role',
+          'message',
+          'status',
+          'submittedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'name',
+          'role',
+          'message',
+          'status',
+          'submittedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.role is string
+        && request.resource.data.role.size() <= 100
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.status == 'pending'
+        && request.resource.data.submittedAt == request.time;
+    }
+
     match /draftContent/{sectionId} {
       allow read, write: if isPortfolioAdmin();
     }
@@ -40,6 +67,66 @@ service cloud.firestore {
     match /publicAchievements/{achievementId} {
       allow read: if true;
       allow write: if isPortfolioAdmin();
+    }
+
+    match /siteImages/{imageId} {
+      allow read: if true;
+      allow create, update: if isPortfolioAdmin()
+        && request.resource.data.keys().hasAll([
+          'dataUrl',
+          'mimeType',
+          'width',
+          'height',
+          'sizeBytes',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'dataUrl',
+          'mimeType',
+          'width',
+          'height',
+          'sizeBytes',
+          'createdAt'
+        ])
+        && request.resource.data.dataUrl is string
+        && request.resource.data.dataUrl.size() < 250000
+        && request.resource.data.mimeType in [
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ];
+      allow delete: if isPortfolioAdmin();
+    }
+
+    match /cloudinaryDeletionQueue/{assetId} {
+      allow read, write: if isPortfolioAdmin();
+    }
+
+    match /feedbackInbox/{feedbackId} {
+      allow create: if isValidFeedbackSubmission();
+      allow read, update, delete: if isPortfolioAdmin();
+    }
+
+    match /publicFeedback/{feedbackId} {
+      allow read: if true;
+      allow write: if isPortfolioAdmin();
+
+      match /likes/{userId} {
+        allow read: if true;
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && exists(
+            /databases/$(database)/documents/publicFeedback/$(feedbackId)
+          )
+          && get(
+            /databases/$(database)/documents/publicFeedback/$(feedbackId)
+          ).data.get('likesDisabled', false) == false
+          && request.resource.data.keys().hasAll(['createdAt'])
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isPortfolioAdmin()
+          || (request.auth != null && request.auth.uid == userId);
+      }
     }
 
     match /{document=**} {
