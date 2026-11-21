@@ -8,7 +8,6 @@ import {
   getDocs,
   onSnapshot,
   serverTimestamp,
-  setDoc,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
@@ -61,8 +60,6 @@ const itemLabels = {
   achievements: "Training / Certificate",
 };
 
-const pendingCloudinaryDeletionsKey = "portfolio-pending-cloudinary-deletions";
-
 async function deleteFeedbackLikes(database, feedbackId) {
   const likesSnapshot = await getDocs(
     collection(database, "publicFeedback", feedbackId, "likes"),
@@ -75,154 +72,6 @@ async function deleteFeedbackLikes(database, feedbackId) {
       .forEach((like) => batch.delete(like.ref));
     await batch.commit();
   }
-}
-
-function getCloudinaryAssetEntries(content) {
-  return [
-    { asset: content?.photo, resourceType: "image" },
-    { asset: content?.resume, resourceType: "raw" },
-    { asset: content?.organizationLogo, resourceType: "image" },
-    ...(Array.isArray(content?.images)
-      ? content.images.map((asset) => ({ asset, resourceType: "image" }))
-      : []),
-  ].filter(({ asset }) => asset);
-}
-
-function normalizeCloudinaryDeletionAssets(assetEntries) {
-  const uniqueAssets = new Map();
-  for (const { asset, resourceType: fallbackResourceType } of assetEntries) {
-    const publicId = asset.publicId || asset.id;
-    const resourceType = asset.resourceType || fallbackResourceType;
-    if (
-      typeof publicId !== "string" ||
-      !publicId ||
-      !["image", "raw"].includes(resourceType)
-    ) {
-      throw new Error("This file is missing Cloudinary deletion information.");
-    }
-
-    uniqueAssets.set(`${resourceType}:${publicId}`, { publicId, resourceType });
-  }
-
-  return Array.from(uniqueAssets.values());
-}
-
-function readPendingCloudinaryDeletions() {
-  const stored = window.localStorage.getItem(pendingCloudinaryDeletionsKey);
-  if (!stored) return [];
-
-  const pending = JSON.parse(stored);
-  if (
-    !Array.isArray(pending) ||
-    pending.some(
-      (asset) =>
-        typeof asset.publicId !== "string" ||
-        !asset.publicId ||
-        !["image", "raw"].includes(asset.resourceType),
-    )
-  ) {
-    throw new Error("The browser's pending Cloudinary cleanup data is invalid.");
-  }
-  return pending;
-}
-
-function rememberPendingCloudinaryDeletions(assets) {
-  const current = readPendingCloudinaryDeletions();
-  const merged = new Map(
-    current.map((asset) => [
-      `${asset.resourceType}:${asset.publicId}`,
-      asset,
-    ]),
-  );
-  assets.forEach((asset) =>
-    merged.set(`${asset.resourceType}:${asset.publicId}`, asset),
-  );
-  window.localStorage.setItem(
-    pendingCloudinaryDeletionsKey,
-    JSON.stringify(Array.from(merged.values())),
-  );
-}
-
-function clearPendingCloudinaryDeletions() {
-  window.localStorage.removeItem(pendingCloudinaryDeletionsKey);
-}
-
-async function enqueueCloudinaryDeletions(assetEntries) {
-  const assets = normalizeCloudinaryDeletionAssets(assetEntries);
-  await Promise.all(
-    assets.map((asset) =>
-      setDoc(
-        doc(
-          db,
-          "cloudinaryDeletionQueue",
-          encodeURIComponent(`${asset.resourceType}:${asset.publicId}`),
-        ),
-        { ...asset, queuedAt: serverTimestamp() },
-        { merge: true },
-      ),
-    ),
-  );
-}
-
-async function retryPendingCloudinaryDeletions() {
-  const pending = readPendingCloudinaryDeletions();
-  if (!pending.length) return;
-
-  await enqueueCloudinaryDeletions(
-    pending.map((asset) => ({ asset, resourceType: asset.resourceType })),
-  );
-  clearPendingCloudinaryDeletions();
-}
-
-async function processCloudinaryDeletionQueue() {
-  const queuedAssets = await getDocs(collection(db, "cloudinaryDeletionQueue"));
-  if (queuedAssets.empty) return null;
-  if (!auth?.currentUser) {
-    throw new Error("Sign in as the portfolio admin to clean up Cloudinary files.");
-  }
-
-  const token = await auth.currentUser.getIdToken();
-  const response = await fetch("/api/cloudinary/deletions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  let result;
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error("The Cloudinary cleanup service returned an unreadable response.");
-  }
-  if (!response.ok) {
-    throw new Error(result.error || `Cloudinary cleanup failed (${response.status}).`);
-  }
-
-  return result;
-}
-
-function getCloudinaryCleanupMessage(result) {
-  if (!result) return "";
-  const messages = [];
-  if (result.deletedCount) {
-    messages.push(
-      `${result.deletedCount} Cloudinary file${result.deletedCount === 1 ? "" : "s"} permanently deleted.`,
-    );
-  }
-  if (result.deferredCount) {
-    messages.push(
-      `${result.deferredCount} file${result.deferredCount === 1 ? "" : "s"} still referenced by saved or published content; cleanup will retry after those references are removed.`,
-    );
-  }
-  return messages.length ? ` ${messages.join(" ")}` : "";
-}
-
-function getCloudinaryCleanupErrorMessage(error) {
-  if (
-    error.code === "permission-denied" ||
-    error.message?.includes("Missing or insufficient permissions")
-  ) {
-    return "Cloudinary cleanup needs the updated Firestore rules. Publish firestore.rules in Firebase Console, then save again.";
-  }
-  return `Cloudinary cleanup is pending: ${error.message}`;
 }
 
 const newItem = (section, order) => ({
@@ -440,30 +289,13 @@ export default function AdminPage() {
     };
   }, [user]);
 
-  const runAction = async (
-    action,
-    successMessage,
-    tone = "success",
-    cleanupCloudinary = false,
-  ) => {
+  const runAction = async (action, successMessage, tone = "success") => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
       await action();
-      let cleanupMessage = "";
-      if (cleanupCloudinary) {
-        try {
-          await retryPendingCloudinaryDeletions();
-          cleanupMessage = getCloudinaryCleanupMessage(
-            await processCloudinaryDeletionQueue(),
-          );
-        } catch (cleanupError) {
-          console.error("Cloudinary cleanup is pending:", cleanupError);
-          cleanupMessage = ` ${getCloudinaryCleanupErrorMessage(cleanupError)}`;
-        }
-      }
-      setMessage(`${successMessage}${cleanupMessage}`);
+      setMessage(successMessage);
       setMessageTone(tone);
     } catch (actionError) {
       console.error("Portfolio admin action failed:", actionError);
@@ -524,13 +356,6 @@ export default function AdminPage() {
       ? null
       : items[section].find((candidate) => candidate.id === itemId);
     const currentImages = item?.images || [];
-    const replacedAsset = isHomeMedia
-      ? sections.home[field]
-      : isExperienceLogo
-        ? item?.[field]
-        : Number.isInteger(targetImageIndex)
-          ? currentImages[targetImageIndex]
-          : null;
     if (
       (isHomeMedia ||
         isExperienceLogo ||
@@ -554,34 +379,6 @@ export default function AdminPage() {
     setError("");
     setMessage("");
     try {
-      let cleanupWarning = "";
-      if (replacedAsset) {
-        const deletionEntries = [
-          {
-            asset: replacedAsset,
-            resourceType: field === "resume" ? "raw" : "image",
-          },
-        ];
-        try {
-          await enqueueCloudinaryDeletions(deletionEntries);
-        } catch (queueError) {
-          console.error("Could not queue replaced Cloudinary asset:", queueError);
-          try {
-            rememberPendingCloudinaryDeletions(
-              normalizeCloudinaryDeletionAssets(deletionEntries),
-            );
-            cleanupWarning =
-              " The old file is saved in this browser's cleanup retry list. Publish the updated Firestore rules, then save the content to retry.";
-          } catch (storageError) {
-            console.error(
-              "Could not preserve pending Cloudinary cleanup in this browser:",
-              storageError,
-            );
-            cleanupWarning =
-              " The replacement can continue, but the old file could not be queued for Cloudinary cleanup.";
-          }
-        }
-      }
       const uploadedAssets = await uploadCloudinaryFiles(files);
       if (isHomeMedia) {
         updateSection("home", field, uploadedAssets[0]);
@@ -600,7 +397,7 @@ export default function AdminPage() {
         }
       }
       setMessage(
-        `${uploadedAssets.length} file${uploadedAssets.length === 1 ? "" : "s"} uploaded.${cleanupWarning}`,
+        `${uploadedAssets.length} file${uploadedAssets.length === 1 ? "" : "s"} uploaded.`,
       );
       setMessageTone("success");
     } catch (uploadError) {
@@ -617,10 +414,10 @@ export default function AdminPage() {
     }
   };
 
-  const removeAsset = async (section, item, asset, field) => {
+  const removeAsset = (section, item, asset, field) => {
     if (
       !window.confirm(
-        "Remove this file from the portfolio? It will be deleted from Cloudinary once no saved or published content uses it.",
+        "Remove this file from the portfolio? The Cloudinary file will remain in your account.",
       )
     ) {
       return;
@@ -628,37 +425,6 @@ export default function AdminPage() {
 
     setError("");
     setMessage("");
-    let cleanupWarning = "";
-    try {
-      await enqueueCloudinaryDeletions([
-        {
-          asset,
-          resourceType: field === "resume" ? "raw" : "image",
-        },
-      ]);
-    } catch (queueError) {
-      console.error("Could not queue Cloudinary asset for deletion:", queueError);
-      try {
-        rememberPendingCloudinaryDeletions(
-          normalizeCloudinaryDeletionAssets([
-            {
-              asset,
-              resourceType: field === "resume" ? "raw" : "image",
-            },
-          ]),
-        );
-        cleanupWarning =
-          " The file is saved in this browser's cleanup retry list. Publish the updated Firestore rules, then save the content to retry.";
-      } catch (storageError) {
-        console.error(
-          "Could not preserve pending Cloudinary cleanup in this browser:",
-          storageError,
-        );
-        cleanupWarning =
-          " The file was removed from the draft, but automatic Cloudinary cleanup could not be queued.";
-      }
-    }
-
     if (section === "home") {
       updateSection("home", field, null);
     } else if (field === "organizationLogo") {
@@ -674,19 +440,7 @@ export default function AdminPage() {
       );
     }
 
-    if (!cleanupWarning) {
-      try {
-        cleanupWarning = getCloudinaryCleanupMessage(
-          await processCloudinaryDeletionQueue(),
-        );
-      } catch (cleanupError) {
-        console.error("Cloudinary cleanup is pending:", cleanupError);
-        cleanupWarning = ` ${getCloudinaryCleanupErrorMessage(cleanupError)}`;
-      }
-    }
-    setMessage(
-      `File removed from the draft. Save or publish to update the site.${cleanupWarning}`,
-    );
+    setMessage("File removed from the draft. Save or publish to update the site.");
     setMessageTone("draft");
   };
 
@@ -712,7 +466,6 @@ export default function AdminPage() {
       () => saveDraft(section, content),
       `${sectionName} draft saved.${content.published ? " The published version remains live." : ""}`,
       "draft",
-      true,
     );
   };
 
@@ -726,7 +479,6 @@ export default function AdminPage() {
       () => publishDraft(section, content),
       `${tabs.find(([id]) => id === section)?.[1]} section published.`,
       "success",
-      true,
     );
   };
 
@@ -736,14 +488,13 @@ export default function AdminPage() {
       () => unpublishDraft(section, content),
       `${tabs.find(([id]) => id === section)?.[1]} section unpublished.`,
       "unpublished",
-      true,
     );
   };
 
   const removeSection = (section) => {
     if (
       !window.confirm(
-        `Delete the ${section} section and its media? Cloudinary files will be deleted only when no other saved or published content uses them.`,
+        `Delete the ${section} section and its media references? Cloudinary files will remain in your account.`,
       )
     ) {
       return;
@@ -751,13 +502,12 @@ export default function AdminPage() {
 
     const content = { id: section, ...sections[section] };
     void runAction(async () => {
-      await enqueueCloudinaryDeletions(getCloudinaryAssetEntries(content));
       await deleteContent(section, content);
       setSections((current) => ({
         ...current,
         [section]: { ...defaultSections[section] },
       }));
-    }, `${section} section deleted.`, "success", true);
+    }, `${section} section deleted.`);
   };
 
   const addItem = (section) => {
@@ -807,7 +557,6 @@ export default function AdminPage() {
       () => saveDraft(section, content),
       `${itemLabels[section]} draft saved.${content.published ? " The published version remains live." : ""}`,
       "draft",
-      true,
     );
   };
 
@@ -818,7 +567,6 @@ export default function AdminPage() {
       () => publishDraft(section, content),
       `${itemLabels[section]} published.`,
       "success",
-      true,
     );
   };
 
@@ -827,22 +575,21 @@ export default function AdminPage() {
       () => unpublishDraft(section, item),
       `${itemLabels[section]} unpublished.`,
       "unpublished",
-      true,
     );
 
   const removeItem = (section, item) => {
     if (
       !window.confirm(
-        `Delete "${item.title}" from the portfolio? Its Cloudinary files will be deleted only when no other saved or published content uses them.`,
+        `Delete "${item.title}" from the portfolio? Its Cloudinary assets will remain in your account.`,
       )
     ) {
       return;
     }
 
-    void runAction(async () => {
-      await enqueueCloudinaryDeletions(getCloudinaryAssetEntries(item));
-      await deleteContent(section, item);
-    }, `${itemLabels[section]} deleted.`, "success", true);
+    void runAction(
+      () => deleteContent(section, item),
+      `${itemLabels[section]} deleted.`,
+    );
   };
 
   const publishFeedback = (item) =>
@@ -1687,8 +1434,8 @@ function MediaField({
         </div>
       </div>
       <p className="mt-2 min-h-10 text-sm leading-5 text-gray-500 dark:text-gray-400">
-        Removed or replaced files are queued for Cloudinary cleanup after no
-        saved or published content uses them.
+        Removing or replacing only updates the portfolio; delete old files
+        separately in Cloudinary Media Library.
       </p>
     </div>
   );
