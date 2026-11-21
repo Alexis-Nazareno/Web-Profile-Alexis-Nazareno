@@ -80,14 +80,29 @@ function FeedbackCard({ item, userId }) {
   const [likeCount, setLikeCount] = useState(0);
   const [hasLiked, setHasLiked] = useState(false);
   const [loadingLikes, setLoadingLikes] = useState(true);
+  const [likesAvailable, setLikesAvailable] = useState(true);
   const [liking, setLiking] = useState(false);
+  const [optimisticLike, setOptimisticLike] = useState(null);
+  const [confirmedLike, setConfirmedLike] = useState(null);
   const [likeError, setLikeError] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [likeAnimationId, setLikeAnimationId] = useState(0);
+  const publishedDate = item.publishedAt?.toDate?.();
+  const hasPublishedDate =
+    publishedDate instanceof Date && !Number.isNaN(publishedDate.getTime());
+  const displayedLike = optimisticLike ?? hasLiked;
+  const displayedCount =
+    likeCount +
+    (optimisticLike === null || optimisticLike === hasLiked
+      ? 0
+      : optimisticLike
+        ? 1
+        : -1);
 
   useEffect(() => {
     if (!db) {
       setLoadingLikes(false);
+      setLikesAvailable(false);
       setLikeError("Likes are temporarily unavailable.");
       return undefined;
     }
@@ -100,7 +115,10 @@ function FeedbackCard({ item, userId }) {
         setHasLiked(
           Boolean(userId) && snapshot.docs.some((like) => like.id === userId),
         );
-        setLikeError("");
+        setLikesAvailable(true);
+        setLikeError((current) =>
+          current === "Likes are temporarily unavailable." ? "" : current,
+        );
         setLoadingLikes(false);
       },
       (snapshotError) => {
@@ -112,14 +130,29 @@ function FeedbackCard({ item, userId }) {
         } else {
           console.error("Could not load feedback likes:", snapshotError);
         }
+        setLikesAvailable(false);
+        setOptimisticLike(null);
+        setConfirmedLike(null);
         setLikeError("Likes are temporarily unavailable.");
         setLoadingLikes(false);
       },
     );
   }, [item.id, userId]);
 
+  useEffect(() => {
+    if (
+      confirmedLike &&
+      !loadingLikes &&
+      userId === confirmedLike.userId &&
+      hasLiked === confirmedLike.value
+    ) {
+      setOptimisticLike(null);
+      setConfirmedLike(null);
+    }
+  }, [confirmedLike, hasLiked, loadingLikes, userId]);
+
   const toggleLike = async () => {
-    if (liking) return;
+    if (liking || confirmedLike) return;
     if (!auth || !db) {
       setLikeError("Likes are temporarily unavailable.");
       return;
@@ -131,19 +164,27 @@ function FeedbackCard({ item, userId }) {
 
     setLiking(true);
     setLikeError("");
+    setOptimisticLike(!hasLiked);
+    setConfirmedLike(null);
     setLikeAnimationId((current) => current + 1);
     try {
       const user = auth.currentUser || (await signInAnonymously(auth)).user;
       const likeRef = doc(db, "publicFeedback", item.id, "likes", user.uid);
-      await runTransaction(db, async (transaction) => {
+      const liked = await runTransaction(db, async (transaction) => {
         const likeSnapshot = await transaction.get(likeRef);
         if (likeSnapshot.exists()) {
           transaction.delete(likeRef);
+          return false;
         } else {
           transaction.set(likeRef, { createdAt: serverTimestamp() });
+          return true;
         }
       });
+      setOptimisticLike(liked);
+      setConfirmedLike({ userId: user.uid, value: liked });
     } catch (likeActionError) {
+      setOptimisticLike(null);
+      setConfirmedLike(null);
       const permissionDenied = likeActionError.code === "permission-denied";
       const anonymousSignInDisabled = [
         "auth/operation-not-allowed",
@@ -201,18 +242,23 @@ function FeedbackCard({ item, userId }) {
             type="button"
             onClick={toggleLike}
             disabled={
-              liking || loadingLikes || Boolean(likeError) || item.likesDisabled
+              liking || Boolean(confirmedLike) || loadingLikes ||
+              !likesAvailable || item.likesDisabled
             }
             aria-label={
               item.likesDisabled
                 ? "Likes are paused for this feedback"
-                : hasLiked
+                : displayedLike
                   ? "Remove your like from this feedback"
                   : "Like this feedback"
             }
-            aria-pressed={hasLiked}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
-              hasLiked
+            aria-pressed={displayedLike}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border transition duration-200 disabled:cursor-not-allowed ${
+              !liking && (loadingLikes || !likesAvailable || item.likesDisabled)
+                ? "opacity-50"
+                : ""
+            } ${
+              displayedLike
                 ? "border-[#efb2c0] bg-[#fff0f3] text-[#c33b5b] shadow-sm dark:border-[#78404e] dark:bg-[#3b1c29] dark:text-[#ff91aa]"
                 : "border-[#dce7e4] text-[#708184] hover:border-[#efb2c0] hover:bg-[#fff5f7] hover:text-[#c33b5b] dark:border-white/10 dark:text-white/60 dark:hover:border-[#78404e] dark:hover:bg-[#3b1c29] dark:hover:text-[#ff91aa]"
             }`}
@@ -222,7 +268,7 @@ function FeedbackCard({ item, userId }) {
               aria-hidden="true"
               viewBox="0 0 20 20"
               className={`h-5 w-5 ${
-                hasLiked ? "fill-current" : "fill-none"
+                displayedLike ? "fill-current" : "fill-none"
               } ${likeAnimationId ? "animate-feedback-like" : ""}`}
               stroke="currentColor"
               strokeWidth="1.6"
@@ -238,9 +284,25 @@ function FeedbackCard({ item, userId }) {
             aria-live="polite"
             className="min-w-5 text-sm font-semibold text-[#40565a] dark:text-white/75"
           >
-            {loadingLikes ? "…" : likeError ? "—" : likeCount}
+            {loadingLikes && optimisticLike === null
+              ? "…"
+              : !likesAvailable
+                ? "—"
+                : displayedCount}
           </span>
           <span className="sr-only">likes</span>
+          {hasPublishedDate && (
+            <time
+              dateTime={publishedDate.toISOString()}
+              className="ml-auto text-right text-xs text-[#738482] dark:text-white/50"
+            >
+              {new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }).format(publishedDate)}
+            </time>
+          )}
         </div>
         {likeError && (
           <p

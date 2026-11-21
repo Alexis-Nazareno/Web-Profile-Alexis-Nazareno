@@ -6,7 +6,7 @@ are uploaded directly to Cloudinary using an unsigned upload preset. Vercel
 hosts the site; no custom server or Cloud Functions are used.
 
 The admin dashboard at `/admin` manages Home, About, Contact, Experience,
-Projects, and Training & Certificates. Published Firestore documents update
+Projects, Training & Certificates, Work Memories, and Work Lessons. Published Firestore documents update
 the public pages live. The CV import button works only when the CMS collections
 are empty; it publishes CV text, work history, projects, and training records.
 It does not upload the original CV or any photos.
@@ -52,6 +52,10 @@ Images use Cloudinary's image upload endpoint; CV PDFs use its raw file upload
 endpoint. Each related Firestore content document stores the secure URL and
 Cloudinary public ID. The profile supports one image; each project or
 certificate supports up to four images.
+Each Work Memories album is independent of the Experience entries and can
+contain up to 20 photos. Add a company, title, optional date and description,
+then save a draft or publish it. Work Lessons can be saved and published
+separately. Check that you have permission to publish photos of other people.
 
 Because the preset is unsigned, the client can upload but cannot securely
 delete assets from Cloudinary. Replacing or removing a file unlinks it from the
@@ -79,6 +83,9 @@ npm run dev
 
 Sign in at `/admin`. If the CMS collections are empty, choose
 **Import and publish CV** to create the published Firestore documents.
+In **Contact**, add complete profile links for the available social platforms
+and choose **Publish changes** to display them in the footer.
+Leave any unused links blank.
 
 ## Vercel deployment
 
@@ -101,8 +108,11 @@ devices can create a new anonymous identity.
 In Firebase Console, open **Firestore Database → Rules**, publish the contents
 of `firestore.rules`, and confirm the selected Firebase project matches
 `NEXT_PUBLIC_FIREBASE_PROJECT_ID`. The feedback form will be blocked until the
-rules are published to the project used by the site. No rules or hosting
-deployment is performed by this setup.
+rules are published to the project used by the site. Work Memories and Work
+Lessons also require the updated rules for `draftMemories`, `publicMemories`,
+`draftLessons`, and `publicLessons`. Publish the rules and refresh the admin
+page before using those sections. No rules or hosting deployment is performed
+by this setup.
 
 ## Useful commands
 
@@ -112,3 +122,29 @@ npm run build
 npm run lint
 npm start
 ```
+
+## Icon license
+
+Social media icons are from Bootstrap Icons:
+
+The MIT License (MIT)
+
+Copyright (c) 2019-2024 The Bootstrap Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
