@@ -19,7 +19,7 @@ import { auth, db, isFirebaseConfigured } from "../../lib/firebase";
 
 const fieldClassName =
   "mt-1.5 w-full rounded-xl border border-[#cbd9d5] bg-white px-3.5 py-3 text-sm text-[#122126] outline-none transition placeholder:text-[#94a19f] focus:border-[#22a98a] focus:ring-2 focus:ring-[#22a98a]/15 dark:border-white/15 dark:bg-[#0b1c22] dark:text-white dark:placeholder:text-white/35 dark:focus:border-[#5be0bf] dark:focus:ring-[#5be0bf]/15";
-const FEEDBACK_PAGE_SIZE = 6;
+const FEEDBACK_PAGE_SIZE = 3;
 
 function FeedbackNotice({ tone, title, children, onDismiss }) {
   const isError = tone === "error";

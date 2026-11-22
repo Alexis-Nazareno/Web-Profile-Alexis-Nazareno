@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePortfolio } from "./components/PortfolioProvider";
 import PortfolioCard from "./components/PortfolioCard";
@@ -11,41 +12,16 @@ import { HomeSkeleton } from "./components/PortfolioSkeleton";
 import RichTextContent from "./components/RichTextContent";
 import { formatExperienceDateRange } from "../lib/experienceDates";
 
-const skillTracks = [
-  {
-    number: "01",
-    title: "Web applications",
-    description:
-      "Thoughtful, responsive interfaces that make everyday workflows easier to use.",
-    matches: [
-      "Next.js",
-      "React.js",
-      "JavaScript",
-      "HTML5",
-      "CSS3",
-      "Tailwind CSS",
-    ],
-  },
-  {
-    number: "02",
-    title: "APIs & integrations",
-    description:
-      "Connecting services and building dependable paths between products and data.",
-    matches: ["Node.js", "Express.js", "REST APIs", "SQL"],
-  },
-  {
-    number: "03",
-    title: "Business systems",
-    description:
-      "Experience across enterprise platforms, cloud-connected systems, and delivery.",
-    matches: ["Oracle Utilities CCB", "AWS", "CI/CD", "Agile/Scrum"],
-  },
-];
+const EXPERIENCE_PAGE_SIZE = 3;
 
-function shortBio(bio = "") {
-  const trimmed = bio.trim();
-  if (trimmed.length <= 210) return trimmed;
-  return `${trimmed.slice(0, 207).trimEnd()}...`;
+function getHeroSummary(headline = "") {
+  const trimmed = headline.trim();
+  const sentenceEnd = trimmed.search(/[.!?](?:\s|$)/);
+  const summary =
+    sentenceEnd === -1 ? trimmed : trimmed.slice(0, sentenceEnd + 1);
+
+  if (summary.length <= 100) return summary;
+  return `${summary.slice(0, 97).trimEnd()}...`;
 }
 
 function ArrowIcon() {
@@ -67,9 +43,44 @@ function ArrowIcon() {
   );
 }
 
+function DownloadIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M4 13.5v4h12v-4" />
+    </svg>
+  );
+}
+
 export default function HomePage() {
   const { home, about, contact, projects, experience, achievements, loading } =
     usePortfolio();
+  const [experiencePage, setExperiencePage] = useState(0);
+  const experiencePageCount = Math.ceil(
+    experience.length / EXPERIENCE_PAGE_SIZE,
+  );
+  const currentExperiencePage = Math.min(
+    experiencePage,
+    Math.max(0, experiencePageCount - 1),
+  );
+  const firstVisibleExperience = currentExperiencePage * EXPERIENCE_PAGE_SIZE;
+  const visibleExperience = experience.slice(
+    firstVisibleExperience,
+    firstVisibleExperience + EXPERIENCE_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setExperiencePage(0);
+  }, [experience.length]);
+
   if (loading) return <HomeSkeleton />;
 
   const initials = (home.name || "AN")
@@ -80,7 +91,7 @@ export default function HomePage() {
     .join("")
     .toUpperCase();
   const location = about.location || contact.location || "Manila, Philippines";
-  const skills = about.skills || [];
+  const heroSummary = getHeroSummary(home.headline);
   const statistics = [
     { value: projects.length, label: "Selected projects", href: "/projects" },
     { value: experience.length, label: "Work experiences", href: "/about" },
@@ -105,25 +116,12 @@ export default function HomePage() {
         />
         <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-14 px-5 py-16 sm:py-20 md:grid-cols-[1.08fr_0.92fr] md:px-8 md:py-24">
           <div className="relative z-10">
-            <p className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.26em] text-[#168e78] dark:text-[#5be0bf]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#39c5a4]" />
-              Software engineer · {location}
-            </p>
-            <p className="mt-10 text-sm font-medium text-[#68787b] dark:text-white/55">
-              Hello, I&apos;m
-            </p>
-            <h1 className="mt-2 max-w-2xl break-words text-5xl font-semibold leading-[1.02] tracking-[-0.055em] text-[#112127] dark:text-white sm:text-6xl lg:text-7xl">
+            <h1 className="max-w-2xl break-words text-5xl font-semibold leading-[1.02] tracking-[-0.055em] text-[#112127] dark:text-white sm:text-6xl lg:text-7xl">
               {home.name}
-              <span className="text-[#23a98c] dark:text-[#5be0bf]">.</span>
             </h1>
-            {home.headline && (
-              <p className="mt-6 max-w-xl text-xl font-medium leading-8 text-[#384b50] dark:text-white/80 sm:text-2xl">
-                {home.headline}
-              </p>
-            )}
-            {about.bio && (
-              <p className="mt-4 max-w-xl text-sm leading-7 text-[#697a7e] dark:text-white/60 sm:text-base">
-                {shortBio(about.bio)}
+            {heroSummary && (
+              <p className="mt-5 max-w-xl text-lg font-medium leading-8 text-[#384b50] dark:text-white/80 sm:text-xl">
+                {heroSummary}
               </p>
             )}
             <div className="mt-8 flex flex-wrap gap-3">
@@ -135,15 +133,10 @@ export default function HomePage() {
               </Link>
               <PortfolioFileLink
                 href={home.resume?.url}
-                className="inline-flex items-center gap-2 rounded-full border border-[#cad9d5] px-6 py-3.5 text-sm font-semibold text-[#253b3e] transition hover:border-[#21b995] hover:text-[#168e78] dark:border-white/20 dark:text-white/80 dark:hover:text-[#5be0bf]"
+                className="inline-flex items-center gap-2 rounded-full border border-[#cad9d5] bg-white/80 px-6 py-3.5 text-sm font-semibold text-[#253b3e] shadow-sm transition hover:border-[#21b995] hover:bg-[#f3fbf8] hover:text-[#168e78] dark:border-white/20 dark:bg-[#102127] dark:text-white/85 dark:hover:border-[#5be0bf]/50 dark:hover:bg-white/[0.08] dark:hover:text-[#5be0bf]"
               >
-                Download CV <span aria-hidden="true">↗</span>
+                Download CV <DownloadIcon />
               </PortfolioFileLink>
-            </div>
-            <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-[#758486] dark:text-white/45">
-              {skills.slice(0, 4).map((skill) => (
-                <span key={skill}>{skill}</span>
-              ))}
             </div>
           </div>
 
@@ -165,14 +158,6 @@ export default function HomePage() {
                 </p>
                 <p className="mt-1 text-sm font-medium">{location}</p>
               </div>
-            </div>
-            <div className="absolute -bottom-5 -right-3 hidden rounded-2xl border border-[#dce7e4] bg-white px-4 py-3 shadow-lg dark:border-white/10 dark:bg-[#102127] sm:block">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[#859391] dark:text-white/45">
-                Focus
-              </p>
-              <p className="mt-1 text-sm font-semibold text-[#183138] dark:text-white">
-                Build · Integrate · Improve
-              </p>
             </div>
           </div>
         </div>
@@ -200,60 +185,6 @@ export default function HomePage() {
               </span>
             </Link>
           ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
-        <div className="grid gap-10 md:grid-cols-[0.72fr_1.28fr] md:gap-16">
-          <div>
-            <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#168e78] dark:text-[#5be0bf]">
-              What I work on
-            </p>
-            <h2 className="text-3xl font-semibold leading-tight tracking-[-0.04em] text-[#122126] dark:text-white sm:text-4xl">
-              Practical solutions, thoughtfully built.
-            </h2>
-            <p className="mt-5 max-w-sm text-sm leading-7 text-[#68797c] dark:text-white/60">
-              A mix of product-focused development, integrations, and business
-              systems work.
-            </p>
-            <Link
-              href="/about"
-              className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#168e78] hover:text-[#0d5f51] dark:text-[#5be0bf]"
-            >
-              More about me <ArrowIcon />
-            </Link>
-          </div>
-
-          <div className="space-y-3">
-            {skillTracks.map((track) => {
-              const trackSkills = track.matches.filter((skill) =>
-                skills.includes(skill),
-              );
-              return (
-                <article
-                  key={track.number}
-                  className="group grid gap-3 rounded-2xl border border-[#dce7e4] bg-white p-5 transition hover:border-[#8ddbc8] hover:bg-[#f8fcfa] sm:grid-cols-[3rem_1fr] sm:gap-5 sm:p-6 dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#4ed8b6]/50 dark:hover:bg-[#122a2f]"
-                >
-                  <span className="pt-1 text-xs font-semibold tracking-widest text-[#21a387] dark:text-[#5be0bf]">
-                    {track.number}
-                  </span>
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#183037] dark:text-white">
-                      {track.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-[#68797c] dark:text-white/60">
-                      {track.description}
-                    </p>
-                    {trackSkills.length > 0 && (
-                      <p className="mt-3 text-xs leading-5 text-[#738482] dark:text-white/45">
-                        {trackSkills.join(" · ")}
-                      </p>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
         </div>
       </section>
 
@@ -287,38 +218,135 @@ export default function HomePage() {
 
       {experience.length > 0 && (
         <section className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
-          <div className="mb-10 max-w-2xl">
-            <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#168e78] dark:text-[#5be0bf]">
-              The journey
-            </p>
-            <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#122126] dark:text-white sm:text-4xl">
-              Experience shaped by real-world work.
-            </h2>
+          <div className="mb-10 flex flex-wrap items-end justify-between gap-5">
+            <div className="max-w-2xl">
+              <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#168e78] dark:text-[#5be0bf]">
+                The journey
+              </p>
+              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#122126] dark:text-white sm:text-4xl">
+                Experience shaped by real-world work.
+              </h2>
+            </div>
+            {experiencePageCount > 1 && (
+              <p className="text-sm text-[#68797c] dark:text-white/55">
+                Showing {firstVisibleExperience + 1}–
+                {Math.min(
+                  firstVisibleExperience + EXPERIENCE_PAGE_SIZE,
+                  experience.length,
+                )}{" "}
+                of {experience.length}
+              </p>
+            )}
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {experience.slice(0, 2).map((item) => (
-              <article
-                key={item.id}
-                className="rounded-2xl border border-[#dce7e4] bg-white p-6 dark:border-white/10 dark:bg-[#102127] sm:p-8"
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {visibleExperience.map((item, index) => {
+              const dateRange = formatExperienceDateRange(item);
+
+              return (
+                <article
+                  key={item.id}
+                  style={{ animationDelay: `${index * 90}ms` }}
+                  className="animate-experience-card-enter group relative flex min-h-[18rem] flex-col overflow-hidden rounded-3xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(16,42,48,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#9bdcc8] hover:shadow-[0_18px_40px_rgba(16,42,48,0.1)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#4ed8b6]/50 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.2)] sm:p-7"
+                >
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-[#eff8f4] transition-transform duration-300 group-hover:scale-125 dark:bg-[#164138]/40"
+                  />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#eaf7f2] text-[#168e78] dark:bg-[#153932] dark:text-[#5be0bf]">
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                      >
+                        <rect
+                          x="3.5"
+                          y="7"
+                          width="17"
+                          height="13.5"
+                          rx="2.5"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7M3.5 12h17m-11 0v2h5v-2"
+                        />
+                      </svg>
+                    </span>
+                    {dateRange && (
+                      <span className="rounded-full border border-[#d9ebe4] bg-white/90 px-3 py-1.5 text-right text-[11px] font-semibold text-[#168e78] dark:border-white/10 dark:bg-[#102127]/90 dark:text-[#5be0bf]">
+                        {dateRange}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative mt-6 min-h-[6.75rem]">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#91a09c] dark:text-white/40">
+                      Experience{" "}
+                      {String(firstVisibleExperience + index + 1).padStart(
+                        2,
+                        "0",
+                      )}
+                    </p>
+                    <h3 className="mt-2 line-clamp-2 min-h-[3.5rem] text-xl font-semibold leading-snug tracking-tight text-[#183037] dark:text-white">
+                      {item.title}
+                    </h3>
+                    {item.organization && (
+                      <p className="mt-1.5 line-clamp-1 text-sm font-medium text-[#64787a] dark:text-white/55">
+                        {item.organization}
+                      </p>
+                    )}
+                  </div>
+                  {item.description && (
+                    <div className="mt-5 border-t border-[#e7efec] pt-4 dark:border-white/10">
+                      <RichTextContent
+                        content={item.description}
+                        className="line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-[#68797c] dark:text-white/60"
+                      />
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          {experiencePageCount > 1 && (
+            <nav
+              aria-label="Experience pages"
+              className="mt-7 flex items-center justify-between gap-4 rounded-2xl border border-[#dce7e4] bg-[#f8fbfa] px-4 py-3 dark:border-white/10 dark:bg-[#102127]"
+            >
+              <button
+                type="button"
+                disabled={currentExperiencePage === 0}
+                onClick={() =>
+                  setExperiencePage((current) => Math.max(0, current - 1))
+                }
+                className="rounded-full border border-[#dce7e4] px-4 py-2 text-sm font-semibold text-[#40565a] transition hover:border-[#9bdcc8] hover:text-[#11654f] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-[#2d705f] dark:hover:text-[#a7eed9]"
               >
-                {formatExperienceDateRange(item) && (
-                  <p className="text-xs font-medium text-[#168e78] dark:text-[#5be0bf]">
-                    {formatExperienceDateRange(item)}
-                  </p>
-                )}
-                <h3 className="mt-3 text-xl font-semibold text-[#183037] dark:text-white">
-                  {item.title}
-                </h3>
-                <p className="mt-1 text-sm text-[#69797b] dark:text-white/50">
-                  {item.organization}
-                </p>
-                <RichTextContent
-                  content={item.description}
-                  className="mt-4 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-[#68797c] dark:text-white/60"
-                />
-              </article>
-            ))}
-          </div>
+                Previous
+              </button>
+              <p
+                aria-live="polite"
+                className="text-center text-sm font-medium text-[#68797c] dark:text-white/55"
+              >
+                Page {currentExperiencePage + 1} of {experiencePageCount}
+              </p>
+              <button
+                type="button"
+                disabled={currentExperiencePage >= experiencePageCount - 1}
+                onClick={() =>
+                  setExperiencePage(
+                    (current) =>
+                      Math.min(current + 1, experiencePageCount - 1),
+                  )
+                }
+                className="rounded-full border border-[#dce7e4] px-4 py-2 text-sm font-semibold text-[#40565a] transition hover:border-[#9bdcc8] hover:text-[#11654f] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-[#2d705f] dark:hover:text-[#a7eed9]"
+              >
+                Next
+              </button>
+            </nav>
+          )}
           <Link
             href="/about"
             className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#168e78] dark:text-[#5be0bf]"
@@ -362,32 +390,55 @@ export default function HomePage() {
 
       <FeedbackSection />
 
-      <section className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
-        <div className="relative overflow-hidden rounded-[2rem] bg-[#102a30] px-6 py-12 text-white sm:px-10 md:px-14 md:py-16">
-          <div
-            aria-hidden="true"
-            className="absolute -right-20 -top-32 h-80 w-80 rounded-full border border-[#5be0bf]/20"
-          />
-          <div
-            aria-hidden="true"
-            className="absolute -right-8 -top-20 h-56 w-56 rounded-full border border-[#5be0bf]/20"
-          />
-          <div className="relative max-w-2xl">
-            <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#68e0c1]">
-              Let&apos;s connect
+      <section className="border-t border-[#dce7e4] bg-white py-20 dark:border-white/10 dark:bg-[#122a30] md:py-28">
+        <div className="mx-auto max-w-6xl px-5 md:px-8">
+          <div className="mb-8 max-w-2xl">
+            <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#168e78] dark:text-[#5be0bf]">
+              Beyond the work
             </p>
-            <h2 className="text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">
-              Have a challenge worth solving?
+            <h2 className="text-3xl font-semibold leading-tight tracking-[-0.04em] text-[#122126] dark:text-white sm:text-4xl">
+              Memories and lessons from the journey.
             </h2>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-white/65 sm:text-base">
-              I&apos;m always glad to connect about software, ideas, and
-              opportunities to build something useful.
-            </p>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
             <Link
-              href="/contact"
-              className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#55dbb9] px-6 py-3.5 text-sm font-semibold text-[#08221f] transition hover:bg-[#8aefd6]"
+              href="/work-memories"
+              className="group flex min-h-56 flex-col items-start justify-between rounded-2xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(27,79,63,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#a7d7c6] hover:shadow-[0_14px_32px_rgba(27,79,63,0.09)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#5be0bf]/35 motion-reduce:transition-none sm:p-8"
             >
-              Get in touch <ArrowIcon />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#168e78] dark:text-[#5be0bf]">
+                  Work memories
+                </p>
+                <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[#183037] dark:text-white">
+                  Moments worth remembering.
+                </h3>
+                <p className="mt-3 max-w-lg text-sm leading-7 text-[#68797c] dark:text-white/60">
+                  A few moments, people, and milestones from my work journey.
+                </p>
+              </div>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#168e78] transition group-hover:gap-3 dark:text-[#5be0bf]">
+                Explore memories <ArrowIcon />
+              </span>
+            </Link>
+            <Link
+              href="/work-lessons"
+              className="group flex min-h-56 flex-col items-start justify-between rounded-2xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(27,79,63,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#a7d7c6] hover:shadow-[0_14px_32px_rgba(27,79,63,0.09)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#5be0bf]/35 motion-reduce:transition-none sm:p-8"
+            >
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#168e78] dark:text-[#5be0bf]">
+                  Work lessons
+                </p>
+                <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[#183037] dark:text-white">
+                  Lessons I carry forward.
+                </h3>
+                <p className="mt-3 max-w-lg text-sm leading-7 text-[#68797c] dark:text-white/60">
+                  Short reflections on teamwork, adapting, and what work has
+                  taught me.
+                </p>
+              </div>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#168e78] transition group-hover:gap-3 dark:text-[#5be0bf]">
+                Read work lessons <ArrowIcon />
+              </span>
             </Link>
           </div>
         </div>

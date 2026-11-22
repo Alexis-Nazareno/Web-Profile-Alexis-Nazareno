@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import PortfolioImage from "../components/PortfolioImage";
 import MemoryPhotoMarquee from "../components/MemoryPhotoMarquee";
 import RichTextContent from "../components/RichTextContent";
-import SectionHeading from "../components/SectionHeading";
+import CollectionHeader from "../components/CollectionHeader";
 import usePublishedWork from "../components/usePublishedWork";
 import { groupMemoryAlbums } from "../../lib/workMemories.mjs";
 
@@ -111,10 +111,12 @@ export default function WorkMemoriesPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 md:px-8 md:py-24">
-      <SectionHeading
-        eyebrow="Beyond work"
+      <CollectionHeader
+        eyebrow="Beyond work · Work memories"
         title="The moments behind the work."
         description="A collection of celebrations, people, and memories from the places where I've worked."
+        count={!loading && !error ? items.length : 0}
+        countLabel={items.length === 1 ? "album shared" : "albums shared"}
       />
       {loading ? (
         <p role="status" className="mt-12 text-sm text-[#65777a] dark:text-white/60">

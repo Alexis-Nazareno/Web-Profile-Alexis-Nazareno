@@ -8,10 +8,14 @@ export default function VantaCloudsBackground() {
   useEffect(() => {
     const element = backgroundRef.current;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const desktopViewport = window.matchMedia(
+      "(min-width: 1024px) and (hover: hover) and (pointer: fine)",
+    );
     let effect;
     let visible = false;
     let disposed = false;
     let generation = 0;
+    const canAnimate = () => !reducedMotion.matches && desktopViewport.matches;
 
     const stop = () => {
       generation += 1;
@@ -20,14 +24,14 @@ export default function VantaCloudsBackground() {
     };
 
     const start = async () => {
-      if (!visible || reducedMotion.matches || effect || disposed) return;
+      if (!visible || !canAnimate() || effect || disposed) return;
       const currentGeneration = ++generation;
       try {
         const [THREE, cloudsModule] = await Promise.all([
           import("three"),
           import("vanta/dist/vanta.clouds.min"),
         ]);
-        if (disposed || !visible || reducedMotion.matches || generation !== currentGeneration) {
+        if (disposed || !visible || !canAnimate() || generation !== currentGeneration) {
           return;
         }
 
@@ -65,19 +69,21 @@ export default function VantaCloudsBackground() {
     });
     observer.observe(element);
 
-    const handleMotionChange = () => {
-      if (reducedMotion.matches) {
+    const handleEnvironmentChange = () => {
+      if (!canAnimate()) {
         stop();
       } else {
         void start();
       }
     };
-    reducedMotion.addEventListener("change", handleMotionChange);
+    reducedMotion.addEventListener("change", handleEnvironmentChange);
+    desktopViewport.addEventListener("change", handleEnvironmentChange);
 
     return () => {
       disposed = true;
       observer.disconnect();
-      reducedMotion.removeEventListener("change", handleMotionChange);
+      reducedMotion.removeEventListener("change", handleEnvironmentChange);
+      desktopViewport.removeEventListener("change", handleEnvironmentChange);
       stop();
     };
   }, []);
