@@ -8,7 +8,7 @@ export default function PortfolioCard({ item, kind = "project" }) {
   const isProject = kind === "project";
 
   return (
-    <article className="group overflow-hidden rounded-[1.4rem] border border-[#dce7e4] bg-white shadow-[0_8px_28px_rgba(16,40,44,0.04)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_42px_rgba(16,40,44,0.1)] dark:border-white/10 dark:bg-[#102127]">
+    <article className="group overflow-hidden rounded-[1.4rem] border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#65c9a9] hover:shadow-[0_18px_42px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_42px_rgba(0,0,0,0.25)]">
       {images.length > 0 ? (
         <div className="grid aspect-[1.8/1] grid-cols-2 gap-1 overflow-hidden bg-[#e8f1ee] dark:bg-[#183037]">
           {images.slice(0, 3).map((image, index) => (
@@ -27,7 +27,7 @@ export default function PortfolioCard({ item, kind = "project" }) {
           ))}
         </div>
       ) : (
-        <div className="relative flex aspect-[1.8/1] items-end overflow-hidden bg-[#e9f4f0] p-5 dark:bg-[#17312f]">
+        <div className="relative flex aspect-[1.8/1] items-end overflow-hidden bg-gradient-to-br from-[#e7f7f0] via-[#dff2e9] to-[#d4eee4] p-5 dark:from-[#173d36] dark:via-[#123a31] dark:to-[#102127]">
           <div
             aria-hidden="true"
             className="absolute -right-8 -top-20 h-56 w-56 rounded-full border border-[#2cae91]/20"

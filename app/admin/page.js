@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -17,6 +18,7 @@ import {
   signOut,
 } from "firebase/auth";
 import PortfolioImage from "../components/PortfolioImage";
+import AccessibleDropdown from "../components/AccessibleDropdown";
 import { usePortfolio } from "../components/PortfolioProvider";
 import MonthPicker from "../components/MonthPicker";
 import RichTextEditor from "../components/RichTextEditor";
@@ -68,6 +70,8 @@ const tabs = [
   ["lessons", "Work Lessons"],
   ["feedback", "Feedback"],
 ];
+
+const sectionOptions = tabs.map(([value, label]) => ({ value, label }));
 
 const itemLabels = {
   projects: "Project",
@@ -147,6 +151,9 @@ export default function AdminPage() {
   const [highlightsError, setHighlightsError] = useState("");
   const [feedbackSubmissions, setFeedbackSubmissions] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [contactMessages, setContactMessages] = useState([]);
+  const [contactMessagesLoading, setContactMessagesLoading] = useState(true);
+  const [contactMessagesError, setContactMessagesError] = useState("");
   const [activeTab, setActiveTab] = useState("home");
   const [newItemSelection, setNewItemSelection] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -183,6 +190,7 @@ export default function AdminPage() {
     if (!user || !db) return;
 
     setFeedbackLoading(true);
+    setContactMessagesLoading(true);
     const unsubscribeSections = onSnapshot(
       collection(db, "draftContent"),
       (snapshot) => {
@@ -444,6 +452,31 @@ export default function AdminPage() {
         setError(snapshotError.message);
       },
     );
+    const unsubscribeContactMessages = onSnapshot(
+      collection(db, "contactInbox"),
+      (snapshot) => {
+        setContactMessages(
+          snapshot.docs
+            .map((item) => ({ id: item.id, ...item.data() }))
+            .sort(
+              (left, right) =>
+                (right.submittedAt?.seconds || 0) -
+                (left.submittedAt?.seconds || 0),
+            ),
+        );
+        setContactMessagesError("");
+        setContactMessagesLoading(false);
+      },
+      (snapshotError) => {
+        console.error("Could not load contact requests:", snapshotError);
+        setContactMessagesError(
+          snapshotError.code === "permission-denied"
+            ? "Access denied. Publish the updated Firestore rules to view contact requests."
+            : "Contact requests could not be loaded.",
+        );
+        setContactMessagesLoading(false);
+      },
+    );
 
     return () => {
       unsubscribeSections();
@@ -453,6 +486,7 @@ export default function AdminPage() {
       unsubscribeWorkContent.forEach((unsubscribe) => unsubscribe());
       unsubscribeHighlights();
       unsubscribeFeedback();
+      unsubscribeContactMessages();
     };
   }, [user]);
 
@@ -1145,6 +1179,30 @@ export default function AdminPage() {
     });
   };
 
+  const markContactHandled = (item) =>
+    void runAction(
+      () =>
+        updateDoc(doc(db, "contactInbox", item.id), {
+          status: "handled",
+          handledAt: serverTimestamp(),
+        }),
+      "Contact request marked as handled.",
+    );
+
+  const deleteContactMessage = (item) => {
+    requestConfirmation({
+      title: "Delete this contact request?",
+      message: `The message from ${item.name} will be permanently deleted.`,
+      confirmLabel: "Delete message",
+      destructive: true,
+      onConfirm: () =>
+        void runAction(
+          () => deleteDoc(doc(db, "contactInbox", item.id)),
+          "Contact request deleted.",
+        ),
+    });
+  };
+
   const importCv = () => {
     requestConfirmation({
       title: "Import CV content?",
@@ -1359,43 +1417,22 @@ export default function AdminPage() {
       )}
 
       <div
-        className="animate-admin-enter mb-8 lg:hidden"
+        className="animate-admin-enter relative z-40 mb-8 lg:hidden"
         style={{ animationDelay: "70ms" }}
       >
-        <label
-          htmlFor="admin-section-select"
+        <span
+          id="admin-section-select-label"
           className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-[#667779] dark:text-white/55"
         >
           Choose a section
-        </label>
-        <div className="relative">
-          <select
-            id="admin-section-select"
-            value={activeTab}
-            onChange={(event) => selectAdminSection(event.target.value)}
-            className="min-h-12 w-full appearance-none rounded-xl border border-[#dce7e4] bg-white px-4 py-3 pr-11 text-sm font-semibold text-[#183037] shadow-sm outline-none transition focus:border-[#168e78] focus:ring-2 focus:ring-[#168e78]/15 dark:border-white/10 dark:bg-[#102127] dark:text-white dark:focus:border-[#5be0bf] dark:focus:ring-[#5be0bf]/15"
-          >
-            {tabs.map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            fill="none"
-            className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#168e78] dark:text-[#5be0bf]"
-          >
-            <path
-              d="m5 7.5 5 5 5-5"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.7"
-            />
-          </svg>
-        </div>
+        </span>
+        <AccessibleDropdown
+          ariaLabelledBy="admin-section-select-label"
+          onChange={selectAdminSection}
+          options={sectionOptions}
+          triggerClassName="min-h-12 px-4 text-[#183037] shadow-sm dark:text-white"
+          value={activeTab}
+        />
       </div>
 
       <div
@@ -1616,6 +1653,14 @@ export default function AdminPage() {
                   value={sectionData.email}
                   onChange={(value) => updateSection(section, "email", value)}
                 />
+                <p className="text-sm leading-6 text-[#65777a] dark:text-white/60 sm:col-span-2">
+                  Contact form messages are saved in the inbox below and sent
+                  through Resend to the server&apos;s{" "}
+                  <code className="rounded bg-[#e8f6f2] px-1.5 py-0.5 text-xs dark:bg-white/10">
+                    CONTACT_EMAIL_TO
+                  </code>{" "}
+                  address.
+                </p>
                 <TextField
                   label="Location"
                   value={sectionData.location}
@@ -1627,21 +1672,38 @@ export default function AdminPage() {
                   value={sectionData.website}
                   onChange={(value) => updateSection(section, "website", value)}
                 />
-                <div className="sm:col-span-2">
-                  <p className="font-semibold">Social media links</p>
-                  <p className="mt-1 text-sm text-[#65777a] dark:text-white/60">
-                    Add complete profile URLs. Only filled links appear in the footer after publishing.
-                  </p>
+                <div className="min-w-0 rounded-2xl border border-[#c8e8dc] bg-gradient-to-br from-[#f7fcfa] via-white to-[#edf8f3] p-4 dark:border-[#2d705f]/60 dark:from-[#12352f] dark:via-[#102127] dark:to-[#0d2024] sm:col-span-2 sm:p-5">
+                  <div className="flex items-start gap-3 border-b border-[#dceee6] pb-4 dark:border-white/10">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#dff5eb] text-[#168e78] dark:bg-[#1b493d] dark:text-[#5be0bf]">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />
+                      </svg>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-[#183037] dark:text-white">Social media links</p>
+                      <p className="mt-1 text-sm leading-6 text-[#65777a] dark:text-white/60">
+                        Add complete profile URLs. Only filled links appear in the footer after publishing.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid min-w-0 grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+                    {socialPlatforms.map(({ field, label }, index) => (
+                      <div
+                        key={field}
+                        className="animate-admin-enter min-w-0"
+                        style={{ animationDelay: `${Math.min(index * 25, 150)}ms` }}
+                      >
+                        <TextField
+                          label={`${label} URL`}
+                          type="url"
+                          value={sectionData[field]}
+                          onChange={(value) => updateSection(section, field, value)}
+                          className="text-sm font-medium text-[#40565a] transition-colors focus-within:text-[#168e78] dark:text-white/75 dark:focus-within:text-[#5be0bf] motion-reduce:transition-none [&>span]:mb-3 [&>span]:text-center"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {socialPlatforms.map(({ field, label }) => (
-                  <TextField
-                    key={field}
-                    label={`${label} URL`}
-                    type="url"
-                    value={sectionData[field]}
-                    onChange={(value) => updateSection(section, field, value)}
-                  />
-                ))}
               </>
             )}
           </div>
@@ -1682,6 +1744,16 @@ export default function AdminPage() {
               Delete section
             </button>
           </div>
+          {section === "contact" && (
+            <ContactInbox
+              items={contactMessages}
+              loading={contactMessagesLoading}
+              error={contactMessagesError}
+              busy={busy || uploading}
+              onMarkHandled={markContactHandled}
+              onDelete={deleteContactMessage}
+            />
+          )}
           {section === "home" && (
             <HighlightsManager
               items={items.highlights}
@@ -2372,6 +2444,192 @@ function HighlightEditor({
         </button>
       </div>
     </article>
+  );
+}
+
+function ContactInbox({
+  items,
+  loading,
+  error,
+  busy,
+  onMarkHandled,
+  onDelete,
+}) {
+  const [filter, setFilter] = useState("new");
+  const newCount = items.filter((item) => item.status !== "handled").length;
+  const handledCount = items.length - newCount;
+  const counts = {
+    new: newCount,
+    handled: handledCount,
+    all: items.length,
+  };
+  const filters = [
+    ["new", "New"],
+    ["handled", "Handled"],
+    ["all", "All"],
+  ];
+  const visibleItems =
+    filter === "all"
+      ? items
+      : items.filter((item) =>
+          filter === "new" ? item.status !== "handled" : item.status === "handled",
+        );
+
+  return (
+    <section className="space-y-5 rounded-2xl border border-[#dce7e4] bg-[#f7fbfa] p-5 dark:border-white/10 dark:bg-[#0b1c22]/70 sm:p-6">
+      <div>
+        <h3 className="text-xl font-semibold">Contact inbox</h3>
+        <p className="mt-1 text-sm leading-6 text-[#65777a] dark:text-white/60">
+          Messages are saved here. When email notifications are configured,
+          reply directly from your email app.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter contact requests">
+        {filters.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={filter === id}
+            onClick={() => setFilter(id)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              filter === id
+                ? "border-[#168e78] bg-[#eaf8f2] text-[#11654f] dark:border-[#5be0bf] dark:bg-[#123a31] dark:text-[#a7eed9]"
+                : "border-[#dce7e4] text-[#5b6d70] hover:border-[#9bdcc8] dark:border-white/10 dark:text-white/65 dark:hover:border-[#2d705f]"
+            }`}
+          >
+            {label} <span className="ml-1 text-xs opacity-70">{counts[id]}</span>
+          </button>
+        ))}
+      </div>
+
+      {error ? (
+        <AdminNotice tone="error">{error}</AdminNotice>
+      ) : loading ? (
+        <div aria-label="Loading contact requests" className="grid gap-3">
+          {[0, 1].map((item) => (
+            <div
+              key={item}
+              className="h-36 animate-pulse rounded-2xl border border-[#dce7e4] bg-white/70 dark:border-white/10 dark:bg-white/5"
+            />
+          ))}
+        </div>
+      ) : visibleItems.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-[#cbd9d5] px-5 py-8 text-center text-sm text-[#667779] dark:border-white/15 dark:text-white/55">
+          {items.length === 0
+            ? "No contact requests yet."
+            : `No ${filter} contact requests.`}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {visibleItems.map((item) => {
+            const submittedDate = item.submittedAt?.toDate?.();
+            const categoryLabel = {
+              project: "Website or project help",
+              opportunity: "Job opportunity",
+              collaboration: "Collaboration",
+              suggestion: "Suggestion or feedback",
+              other: "Other",
+            }[item.category] || "Other";
+            const dateLabel = submittedDate
+              ? new Intl.DateTimeFormat("en-US", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(submittedDate)
+              : "Submission date unavailable";
+
+            return (
+              <article
+                key={item.id}
+                className="rounded-2xl border border-[#dce7e4] bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-[#102127]/80 sm:p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="inline-flex rounded-full bg-[#e8f6f7] px-2.5 py-1 text-xs font-semibold capitalize text-[#176b76] dark:bg-[#12383d] dark:text-[#89dce3]">
+                      {categoryLabel}
+                    </span>
+                    <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-[#65777a] dark:text-white/50">
+                      Request title
+                    </p>
+                    <h4 className="mt-1 break-words font-semibold text-[#183037] dark:text-white">
+                      {item.subject}
+                    </h4>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      item.status === "handled"
+                        ? "bg-[#e6f7ef] text-[#14734f] dark:bg-[#153c30] dark:text-[#8de1ba]"
+                        : "bg-[#fff4df] text-[#8a5a00] dark:bg-[#3b3018] dark:text-[#f6d27e]"
+                    }`}
+                  >
+                    {item.status === "handled" ? "Handled" : "New"}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[#e5eeea] bg-[#f7fbfa] p-4 dark:border-white/10 dark:bg-[#0b1c22]/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#65777a] dark:text-white/50">
+                      What they want done
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-[#52676a] dark:text-white/70">
+                      {item.details || "Not included in this older submission."}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#e5eeea] bg-[#f7fbfa] p-4 dark:border-white/10 dark:bg-[#0b1c22]/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#65777a] dark:text-white/50">
+                      Why / purpose
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-[#52676a] dark:text-white/70">
+                      {item.message}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[#e5eeea] bg-[#f7fbfa] px-4 py-3 dark:border-white/10 dark:bg-[#0b1c22]/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#65777a] dark:text-white/50">
+                      From
+                    </p>
+                    <p className="mt-1 break-words text-sm font-medium text-[#183037] dark:text-white">
+                      {item.name}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#e5eeea] bg-[#f7fbfa] px-4 py-3 dark:border-white/10 dark:bg-[#0b1c22]/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#65777a] dark:text-white/50">
+                      Email
+                    </p>
+                    <p className="mt-1 break-all text-sm text-[#126d5b] dark:text-[#83e6ce]">
+                      {item.email}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-[#81908e] dark:text-white/40">
+                  {dateLabel}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-[#e5eeea] pt-4 dark:border-white/10">
+                  {item.status !== "handled" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onMarkHandled(item)}
+                      className="rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-3 py-2 text-sm font-semibold text-[#126d5b] transition hover:bg-[#d7f0e7] disabled:opacity-50 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]"
+                    >
+                      Mark handled
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onDelete(item)}
+                    className="rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#ffe0e0] disabled:opacity-50 dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528]"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

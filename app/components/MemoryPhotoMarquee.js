@@ -67,7 +67,7 @@ export default function MemoryPhotoMarquee({ images, title, onOpen }) {
     <div className="mt-5">
       {overflowing && (
         <div className="mb-2 flex justify-end">
-          <div className="flex items-center gap-1 rounded-full border border-[#dce7e4] bg-[#f4f9f7] p-1 dark:border-white/10 dark:bg-[#193238]">
+          <div className="flex items-center gap-1 rounded-full border border-[#b8e8d7] bg-gradient-to-r from-[#f3fcf8] to-[#e3f6ed] p-1 dark:border-[#2d705f] dark:from-[#123a31] dark:to-[#102127]">
             <button
               type="button"
               onClick={() => movePhotos(-1)}
