@@ -57,6 +57,10 @@ service cloud.firestore {
       allow read, write: if isPortfolioAdmin();
     }
 
+    match /draftHighlights/{highlightId} {
+      allow read, write: if isPortfolioAdmin();
+    }
+
     match /publicContent/{sectionId} {
       allow read: if true;
       allow write: if isPortfolioAdmin();
@@ -83,6 +87,11 @@ service cloud.firestore {
     }
 
     match /publicLessons/{lessonId} {
+      allow read: if true;
+      allow write: if isPortfolioAdmin();
+    }
+
+    match /publicHighlights/{highlightId} {
       allow read: if true;
       allow write: if isPortfolioAdmin();
     }

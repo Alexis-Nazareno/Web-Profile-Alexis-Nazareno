@@ -5,6 +5,44 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes admin-dashboard-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-admin-enter {
+  animation: admin-dashboard-enter 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes admin-brand-mark-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.78) rotate(-8deg);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1.04) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+.animate-admin-brand-mark-enter {
+  animation: admin-brand-mark-enter 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.animate-admin-brand-copy {
+  animation: admin-dashboard-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
 :root {
   color-scheme: light;
 }
@@ -72,6 +110,21 @@ body {
 
 .animate-experience-card-enter {
   animation: experience-card-enter 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes highlight-card-enter {
+  from {
+    opacity: 0;
+    translate: 0 20px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.animate-highlight-card-enter {
+  animation: highlight-card-enter 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @keyframes about-card-reveal {
@@ -160,8 +213,12 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-feedback-like,
+  .animate-admin-enter,
+  .animate-admin-brand-mark-enter,
+  .animate-admin-brand-copy,
   .animate-about-card-enter,
   .animate-experience-card-enter,
+  .animate-highlight-card-enter,
   .animate-experience-timeline-line,
   .animate-experience-timeline-node,
   .animate-experience-timeline-node.experience-timeline-node-current::after {
