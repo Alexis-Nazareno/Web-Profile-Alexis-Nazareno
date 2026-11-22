@@ -37,7 +37,7 @@ export default function AchievementsPage() {
             {filter.visibleEntries.map(({ item, number }) => {
               const images = Array.isArray(item.images) ? item.images : [];
               return (
-                <article key={item.id} className="group relative min-w-0 overflow-hidden rounded-2xl border border-[#dce7e4] bg-white shadow-[0_8px_24px_rgba(27,79,63,0.04)] transition-[border-color,box-shadow,transform] duration-300 hover:border-[#a7d7c6] hover:shadow-[0_14px_32px_rgba(27,79,63,0.09)] motion-safe:hover:-translate-y-1 motion-reduce:transition-none dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#5be0bf]/35">
+                <article key={item.id} className="group relative min-w-0 overflow-hidden rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition-[border-color,box-shadow,transform] duration-300 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] motion-safe:hover:-translate-y-1 motion-reduce:transition-none dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)]">
                   <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-[#4bc9a4] via-[#a5e5ce] to-transparent opacity-70" />
                   {images.length > 0 && (
                     <div className="grid aspect-[1.8/1] grid-cols-2 gap-1 overflow-hidden bg-[#e8f1ee] dark:bg-[#183037]">

@@ -208,7 +208,7 @@ function FeedbackCard({ item, userId }) {
   };
 
   return (
-    <figure className="flex h-full flex-col rounded-2xl border border-[#dce7e4] bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#b8d9cf] hover:shadow-md dark:border-white/10 dark:bg-[#102127] dark:hover:border-white/20">
+    <figure className="flex h-full flex-col rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-5 shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)]">
       <figcaption className="border-b border-[#e5eeea] pb-3 dark:border-white/10">
         <p className="text-sm font-semibold text-[#183037] dark:text-white">
           {item.name?.trim() || "Anonymous"}
@@ -538,7 +538,7 @@ export default function FeedbackSection() {
               {feedbackPageCount > 1 && (
                 <nav
                   aria-label="Published feedback pages"
-                  className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-[#dce7e4] bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-[#102127]/70"
+                  className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-[#9bdcc8] bg-gradient-to-r from-[#f3fcf8] via-white to-[#e9f8f2] px-4 py-3 shadow-[0_8px_24px_rgba(16,54,48,0.05)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]"
                 >
                   <button
                     type="button"
@@ -548,7 +548,7 @@ export default function FeedbackSection() {
                         Math.max(0, Math.min(current, feedbackPageCount - 1) - 1),
                       )
                     }
-                    className="rounded-full border border-[#dce7e4] px-4 py-2 text-sm font-semibold text-[#40565a] transition hover:border-[#9bdcc8] hover:text-[#11654f] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-[#2d705f] dark:hover:text-[#a7eed9]"
+                    className="rounded-full border border-[#9bdcc8] bg-gradient-to-r from-[#e9faf3] to-[#d8f4e9] px-4 py-2 text-sm font-semibold text-[#11654f] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0 disabled:cursor-not-allowed disabled:border-[#dce7e4] disabled:bg-none disabled:text-[#81908e] disabled:opacity-50 dark:border-[#2d705f] dark:from-[#123a31] dark:to-[#15483b] dark:text-[#a7eed9] dark:disabled:border-white/10 dark:disabled:from-[#102127] dark:disabled:to-[#102127] dark:disabled:text-white/40 motion-reduce:transition-none"
                   >
                     Previous
                   </button>
@@ -566,7 +566,7 @@ export default function FeedbackSection() {
                         Math.min(current + 1, feedbackPageCount - 1),
                       )
                     }
-                    className="rounded-full border border-[#dce7e4] px-4 py-2 text-sm font-semibold text-[#40565a] transition hover:border-[#9bdcc8] hover:text-[#11654f] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-[#2d705f] dark:hover:text-[#a7eed9]"
+                    className="rounded-full border border-[#9bdcc8] bg-gradient-to-r from-[#e9faf3] to-[#d8f4e9] px-4 py-2 text-sm font-semibold text-[#11654f] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0 disabled:cursor-not-allowed disabled:border-[#dce7e4] disabled:bg-none disabled:text-[#81908e] disabled:opacity-50 dark:border-[#2d705f] dark:from-[#123a31] dark:to-[#15483b] dark:text-[#a7eed9] dark:disabled:border-white/10 dark:disabled:from-[#102127] dark:disabled:to-[#102127] dark:disabled:text-white/40 motion-reduce:transition-none"
                   >
                     Next
                   </button>
@@ -581,7 +581,7 @@ export default function FeedbackSection() {
         </div>
 
         <div className="mt-14 border-t border-[#d6e5df] pt-10 dark:border-white/10">
-          <div className="mx-auto max-w-3xl rounded-[1.5rem] border border-[#dce7e4] bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#102127] sm:p-7">
+          <div className="mx-auto max-w-3xl rounded-[1.5rem] border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-5 shadow-[0_16px_45px_rgba(16,54,48,0.08)] transition-shadow duration-300 hover:shadow-[0_22px_55px_rgba(16,54,48,0.14)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:shadow-[0_16px_45px_rgba(0,0,0,0.2)] dark:hover:shadow-[0_22px_55px_rgba(0,0,0,0.28)] motion-reduce:transition-none sm:p-7">
             <h3 className="text-xl font-semibold text-[#183037] dark:text-white">
               Share your feedback
             </h3>
@@ -666,9 +666,36 @@ export default function FeedbackSection() {
               <button
                 type="submit"
                 disabled={sending || !isFirebaseConfigured}
-                className="inline-flex items-center justify-center rounded-full bg-[#168e78] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
+                className="group relative isolate inline-flex items-center justify-center gap-2 overflow-hidden rounded-full border border-[#a5f4dc]/80 bg-gradient-to-r from-[#69ebc4] via-[#4ed8b6] to-[#20b994] px-4 py-2 text-sm font-semibold text-[#062822] shadow-[0_6px_20px_rgba(46,195,154,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(46,195,154,0.4)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a7f3d0] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#102127] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
               >
-                {sending ? "Sending..." : "Send feedback"}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -left-1/3 top-[-70%] h-[240%] w-1/4 rotate-[25deg] bg-gradient-to-r from-transparent via-white/65 to-transparent opacity-0 transition-all duration-700 group-hover:left-[115%] group-hover:opacity-100 motion-reduce:transition-none"
+                />
+                <span className="relative z-10">
+                  {sending ? "Sending..." : "Send feedback"}
+                </span>
+                <span className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#063b32]/10 transition-colors duration-200 group-hover:bg-[#063b32]/15">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path
+                      d="M22 2 11 13"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="m22 2-7 20-4-9-9-4 20-7Z"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
               </button>
             </form>
           </div>

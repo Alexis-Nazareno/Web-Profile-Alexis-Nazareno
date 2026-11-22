@@ -140,7 +140,7 @@ export default function WorkMemoriesPage() {
               </div>
               <div className="grid gap-6">
                 {company.albums.map((album) => (
-                  <article key={album.id} className="min-w-0 rounded-2xl border border-[#dce7e4] bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#102127] sm:p-7">
+                  <article key={album.id} className="min-w-0 rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-5 shadow-[0_12px_30px_rgba(16,54,48,0.06)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:shadow-[0_12px_30px_rgba(0,0,0,0.2)] sm:p-7">
                     {album.date && (
                       <p className="mb-2 text-xs font-medium text-[#168e78] dark:text-[#5be0bf]">
                         {album.date}

@@ -151,15 +151,19 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/projects"
-                className="inline-flex items-center gap-2 rounded-full bg-[#0f292d] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#16443f] dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
+                className="group relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-[#a5f4dc]/80 bg-gradient-to-r from-[#69ebc4] via-[#4ed8b6] to-[#20b994] px-6 py-3.5 text-sm font-semibold text-[#062822] shadow-[0_6px_20px_rgba(46,195,154,0.28)] transition-all duration-300 hover:shadow-[0_10px_28px_rgba(46,195,154,0.4)] motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#168e78] focus-visible:ring-offset-2 dark:focus-visible:ring-[#a7f3d0] dark:focus-visible:ring-offset-[#09171d] motion-reduce:transition-none"
               >
-                Explore my work <ArrowIcon />
+                <span aria-hidden="true" className="pointer-events-none absolute -left-1/3 top-[-70%] h-[240%] w-1/4 rotate-[25deg] bg-gradient-to-r from-transparent via-white/65 to-transparent opacity-0 transition-all duration-700 group-hover:left-[115%] group-hover:opacity-100 motion-reduce:transition-none" />
+                <span className="relative z-10">Explore my work</span>
+                <span className="relative z-10"><ArrowIcon /></span>
               </Link>
               <PortfolioFileLink
                 href={home.resume?.url}
-                className="inline-flex items-center gap-2 rounded-full border border-[#cad9d5] bg-white/80 px-6 py-3.5 text-sm font-semibold text-[#253b3e] shadow-sm transition hover:border-[#21b995] hover:bg-[#f3fbf8] hover:text-[#168e78] dark:border-white/20 dark:bg-[#102127] dark:text-white/85 dark:hover:border-[#5be0bf]/50 dark:hover:bg-white/[0.08] dark:hover:text-[#5be0bf]"
+                className="group relative isolate inline-flex items-center gap-2 overflow-hidden rounded-full border border-[#b8d9cf] bg-gradient-to-r from-white via-[#f3fcf8] to-[#e3f6ed] px-6 py-3.5 text-sm font-semibold text-[#253b3e] shadow-sm transition-all duration-300 hover:border-[#21b995] hover:text-[#168e78] hover:shadow-[0_10px_28px_rgba(16,54,48,0.12)] motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#168e78] focus-visible:ring-offset-2 dark:border-white/20 dark:from-[#102127] dark:via-[#163530] dark:to-[#123a31] dark:text-white/85 dark:hover:border-[#5be0bf]/50 dark:hover:text-[#5be0bf] dark:focus-visible:ring-[#a7f3d0] dark:focus-visible:ring-offset-[#09171d] motion-reduce:transition-none"
               >
-                Download CV <DownloadIcon />
+                <span aria-hidden="true" className="pointer-events-none absolute -left-1/3 top-[-70%] h-[240%] w-1/4 rotate-[25deg] bg-gradient-to-r from-transparent via-white/65 to-transparent opacity-0 transition-all duration-700 group-hover:left-[115%] group-hover:opacity-100 motion-reduce:transition-none" />
+                <span className="relative z-10">Download CV</span>
+                <span className="relative z-10"><DownloadIcon /></span>
               </PortfolioFileLink>
             </div>
           </div>
@@ -167,16 +171,16 @@ export default function HomePage() {
           <div className="relative mx-auto w-full max-w-[27rem] md:ml-auto">
             <div
               aria-hidden="true"
-              className="absolute -right-5 -top-5 h-28 w-28 rounded-[2rem] bg-[#c4f1e4] dark:bg-[#1b5148]"
+              className="absolute -right-5 -top-5 h-28 w-28 rounded-[2rem] bg-gradient-to-br from-[#c4f1e4] via-[#71d8b8] to-[#168e78] dark:from-[#2b8770] dark:via-[#1b5148] dark:to-[#123a31]"
             />
-            <div className="relative rounded-[2rem] border border-[#dce7e4] bg-white p-3 shadow-[0_28px_70px_rgba(13,40,43,0.12)] dark:border-white/10 dark:bg-[#102127]">
+            <div className="relative rounded-[2rem] border border-[#9bdcc8] bg-gradient-to-br from-[#e7f7f0] via-[#c6ebdc] to-[#82ceb5] p-3 shadow-[0_28px_70px_rgba(13,40,43,0.16)] dark:border-[#2d705f] dark:from-[#164138] dark:via-[#123a31] dark:to-[#0d2024] dark:shadow-[0_28px_70px_rgba(0,0,0,0.3)]">
               <PortfolioImage
                 url={home.photo?.url}
                 alt={`${home.name} profile`}
                 fallbackText={initials}
                 className="aspect-[4/4.7] w-full rounded-[1.45rem]"
               />
-              <div className="absolute bottom-7 left-7 right-7 rounded-2xl border border-white/10 bg-[#0b1c22]/90 px-5 py-4 text-white shadow-xl backdrop-blur-md">
+              <div className="absolute bottom-7 left-7 right-7 rounded-2xl border border-[#5be0bf]/30 bg-gradient-to-r from-[#0b1c22]/95 via-[#102a30]/95 to-[#123a31]/95 px-5 py-4 text-white shadow-[0_12px_35px_rgba(0,0,0,0.3)] backdrop-blur-md">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.24em] text-[#69dfc1]">
                   Based in
                 </p>
@@ -389,14 +393,14 @@ export default function HomePage() {
                 <article
                   key={item.id}
                   style={{ animationDelay: `${index * 90}ms` }}
-                  className="animate-experience-card-enter group relative flex min-h-[18rem] flex-col overflow-hidden rounded-3xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(16,42,48,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#9bdcc8] hover:shadow-[0_18px_40px_rgba(16,42,48,0.1)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#4ed8b6]/50 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.2)] sm:p-7"
+                  className="animate-experience-card-enter group relative flex min-h-[18rem] flex-col overflow-hidden rounded-3xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-6 shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)] sm:p-7"
                 >
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-[#eff8f4] transition-transform duration-300 group-hover:scale-125 dark:bg-[#164138]/40"
+                    className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-[#dff8ef] via-[#eaf8f2] to-transparent transition-transform duration-300 group-hover:scale-125 dark:from-[#164138]/65 dark:via-[#164138]/25 dark:to-transparent"
                   />
                   <div className="relative flex items-start justify-between gap-3">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#eaf7f2] text-[#168e78] dark:bg-[#153932] dark:text-[#5be0bf]">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[#b8e8d7] bg-gradient-to-br from-[#e9faf3] to-[#d4f2e5] text-[#168e78] dark:border-[#2d705f] dark:from-[#164138] dark:to-[#123a31] dark:text-[#5be0bf]">
                       <svg
                         aria-hidden="true"
                         viewBox="0 0 24 24"
@@ -420,7 +424,7 @@ export default function HomePage() {
                       </svg>
                     </span>
                     {dateRange && (
-                      <span className="rounded-full border border-[#d9ebe4] bg-white/90 px-3 py-1.5 text-right text-[11px] font-semibold text-[#168e78] dark:border-white/10 dark:bg-[#102127]/90 dark:text-[#5be0bf]">
+                      <span className="rounded-full border border-[#b8e8d7] bg-gradient-to-r from-[#f3fcf8] to-[#e3f6ed] px-3 py-1.5 text-right text-[11px] font-semibold text-[#168e78] dark:border-[#2d705f] dark:from-[#123a31] dark:to-[#102127] dark:text-[#5be0bf]">
                         {dateRange}
                       </span>
                     )}
@@ -546,7 +550,7 @@ export default function HomePage() {
           <div className="grid gap-5 md:grid-cols-2">
             <Link
               href="/work-memories"
-              className="group flex min-h-56 flex-col items-start justify-between rounded-2xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(27,79,63,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#a7d7c6] hover:shadow-[0_14px_32px_rgba(27,79,63,0.09)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#5be0bf]/35 motion-reduce:transition-none sm:p-8"
+              className="group flex min-h-56 flex-col items-start justify-between rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-6 shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)] motion-reduce:transition-none sm:p-8"
             >
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#168e78] dark:text-[#5be0bf]">
@@ -565,7 +569,7 @@ export default function HomePage() {
             </Link>
             <Link
               href="/work-lessons"
-              className="group flex min-h-56 flex-col items-start justify-between rounded-2xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(27,79,63,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#a7d7c6] hover:shadow-[0_14px_32px_rgba(27,79,63,0.09)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#5be0bf]/35 motion-reduce:transition-none sm:p-8"
+              className="group flex min-h-56 flex-col items-start justify-between rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-6 shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)] motion-reduce:transition-none sm:p-8"
             >
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#168e78] dark:text-[#5be0bf]">

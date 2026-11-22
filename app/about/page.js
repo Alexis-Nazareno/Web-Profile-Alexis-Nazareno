@@ -131,7 +131,7 @@ export default function AboutPage() {
               <article
                 key={`perspective-${index}`}
                 style={{ animationDelay: `${120 + index * 100}ms` }}
-                className="animate-about-card-enter group relative overflow-hidden rounded-2xl border border-[#dce7e4] bg-white p-6 shadow-[0_8px_24px_rgba(27,79,63,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#a7d7c6] hover:shadow-[0_14px_32px_rgba(27,79,63,0.09)] dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#5be0bf]/35 motion-reduce:transition-none sm:p-7"
+                className="animate-about-card-enter group relative overflow-hidden rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-6 shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)] motion-reduce:transition-none sm:p-7"
               >
                 <div
                   aria-hidden="true"
@@ -152,7 +152,7 @@ export default function AboutPage() {
       <div className="mt-14 grid grid-cols-1 gap-8">
         <article
           style={{ animationDelay: "120ms" }}
-          className="animate-about-card-enter min-w-0 rounded-[1.5rem] border border-[#dce7e4] bg-white p-6 shadow-[0_16px_50px_rgba(16,54,48,0.06)] dark:border-white/10 dark:bg-[#102127] dark:shadow-[0_16px_50px_rgba(0,0,0,0.12)] sm:p-9"
+          className="animate-about-card-enter min-w-0 rounded-[1.5rem] border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-6 shadow-[0_16px_50px_rgba(16,54,48,0.08)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:shadow-[0_16px_50px_rgba(0,0,0,0.2)] sm:p-9"
         >
           {photos.length > 0 && (
             <section className="mt-7">
@@ -171,7 +171,7 @@ export default function AboutPage() {
                   <figure
                     key={photo.publicId}
                     style={{ animationDelay: `${240 + index * 120}ms` }}
-                    className="animate-about-card-enter w-[min(78vw,20rem)] flex-none snap-center overflow-hidden rounded-2xl border border-[#dce7e4] bg-white p-2 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg dark:border-white/10 dark:bg-[#102127] dark:hover:border-[#4ed8b6]/35 motion-reduce:transition-none lg:w-auto"
+                    className="animate-about-card-enter w-[min(78vw,20rem)] flex-none snap-center overflow-hidden rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f3fcf8] via-white to-[#e2f5eb] p-2 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#65c9a9] hover:shadow-lg dark:border-[#2d705f] dark:from-[#164138] dark:via-[#123a31] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 motion-reduce:transition-none lg:w-auto"
                   >
                     <PortfolioImage
                       url={photo.url}
@@ -194,7 +194,7 @@ export default function AboutPage() {
               {details.map(([label, value], index) => (
                 <div
                   key={`${label}-${index}`}
-                  className="rounded-xl border border-[#e5eeea] bg-[#f5f9f7] p-4 transition-colors hover:border-[#b6dfd1] dark:border-white/10 dark:bg-white/5 dark:hover:border-[#4ed8b6]/30"
+                  className="rounded-xl border border-[#b8e8d7] bg-gradient-to-br from-[#f3fcf8] to-[#e5f5ed] p-4 transition-colors hover:border-[#65c9a9] dark:border-[#2d705f] dark:from-[#123a31] dark:to-[#102127] dark:hover:border-[#4ed8b6]/50"
                 >
                   <dt className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#778785] dark:text-white/45">
                     {label}
@@ -411,7 +411,7 @@ export default function AboutPage() {
                       timelineVisible ? "animate-experience-timeline-node" : ""
                     }`}
                   />
-                  <div className="group rounded-2xl border border-[#dce7e4] bg-white/80 p-5 shadow-sm transition duration-300 hover:border-[#9bdcc8] hover:shadow-md dark:border-white/10 dark:bg-[#102127]/70 dark:hover:border-[#4ed8b6]/40 dark:hover:shadow-lg sm:p-6 motion-reduce:transition-none">
+                  <div className="group rounded-2xl border border-[#9bdcc8] bg-gradient-to-br from-[#f7fffc] via-white to-[#eaf8f2] p-5 shadow-[0_12px_30px_rgba(16,54,48,0.06)] transition duration-300 hover:border-[#65c9a9] hover:shadow-[0_18px_40px_rgba(16,54,48,0.12)] dark:border-[#2d705f] dark:from-[#123a31] dark:via-[#102127] dark:to-[#0d2024] dark:hover:border-[#4ed8b6]/60 dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.25)] sm:p-6 motion-reduce:transition-none">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <h3 className="text-xl font-semibold text-[#1a3035] dark:text-white">
@@ -434,7 +434,7 @@ export default function AboutPage() {
                           />
                         )}
                         {dateRange && (
-                          <span className="rounded-full border border-[#d9ebe4] bg-[#f2f8f6] px-3 py-1.5 text-right text-xs font-semibold text-[#168e78] dark:border-white/10 dark:bg-white/5 dark:text-[#5be0bf]">
+                          <span className="rounded-full border border-[#b8e8d7] bg-gradient-to-r from-[#f3fcf8] to-[#e3f6ed] px-3 py-1.5 text-right text-xs font-semibold text-[#168e78] dark:border-[#2d705f] dark:from-[#123a31] dark:to-[#102127] dark:text-[#5be0bf]">
                             {dateRange}
                           </span>
                         )}

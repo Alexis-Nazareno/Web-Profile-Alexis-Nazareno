@@ -33,6 +33,53 @@ service cloud.firestore {
         && request.resource.data.submittedAt == request.time;
     }
 
+    function isValidContactSubmission() {
+      return request.resource.data.keys().hasAll([
+          'name',
+          'email',
+          'category',
+          'subject',
+          'details',
+          'message',
+          'status',
+          'submittedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'name',
+          'email',
+          'category',
+          'subject',
+          'details',
+          'message',
+          'status',
+          'submittedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[^@]+@[^@]+\\.[^@]+$')
+        && request.resource.data.category in [
+          'project',
+          'opportunity',
+          'collaboration',
+          'suggestion',
+          'other'
+        ]
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.subject.size() <= 120
+        && request.resource.data.details is string
+        && request.resource.data.details.size() > 0
+        && request.resource.data.details.size() <= 5000
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.status == 'new'
+        && request.resource.data.submittedAt == request.time;
+    }
+
     match /draftContent/{sectionId} {
       allow read, write: if isPortfolioAdmin();
     }
@@ -127,6 +174,11 @@ service cloud.firestore {
 
     match /feedbackInbox/{feedbackId} {
       allow create: if isValidFeedbackSubmission();
+      allow read, update, delete: if isPortfolioAdmin();
+    }
+
+    match /contactInbox/{contactId} {
+      allow create: if isValidContactSubmission();
       allow read, update, delete: if isPortfolioAdmin();
     }
 
