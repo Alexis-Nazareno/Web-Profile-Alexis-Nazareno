@@ -7,6 +7,7 @@ import {
   MAX_LESSONS_PER_IMPORT,
   parseLessonImport,
 } from "../../lib/lessonImport.mjs";
+import { getHighlightSchedule } from "../../lib/highlightSchedule.mjs";
 
 const fieldClass =
   "w-full rounded-lg border border-[#cbd9d5] bg-white px-3 py-2.5 text-[#122126] outline-none transition focus:border-[#22a98a] focus:ring-2 focus:ring-[#22a98a]/20 dark:border-white/15 dark:bg-[#0b1c22] dark:text-white";
@@ -40,6 +41,13 @@ const importOptions = {
     example:
       "Organization: [company name]\nTitle: [lesson title]\nDescription: [what you learned]\n---\nOrganization: [another company]\nTitle: [another lesson]\nDescription: [what you learned]",
   },
+  highlights: {
+    label: "holidays and events",
+    itemLabel: "holiday or event",
+    itemPluralLabel: "holidays or events",
+    example:
+      "Type: Holiday\nTitle: New Year\nShow from: 2027-01-01 00:00\nShow until: 2027-01-01 23:59\nDescription: New Year's Day celebration.\nWhy it matters: A time for families to welcome the new year together.\nLink: https://example.com\n---\nType: Event\nTitle: Valentine's Day\nShow from: 2027-02-14 00:00\nShow until: 2027-02-14 23:59\nDescription: A day to celebrate love and friendship.",
+  },
 };
 
 function normalizedExperienceDate(value, isEndDate = false) {
@@ -53,6 +61,7 @@ export default function BulkContentImport({ section, busy, onSave }) {
   const options = importOptions[section];
   const isExperience = section === "experience";
   const isLesson = section === "lessons";
+  const isHighlight = section === "highlights";
   const [text, setText] = useState("");
   const [preview, setPreview] = useState([]);
   const [intro, setIntro] = useState(null);
@@ -131,6 +140,7 @@ export default function BulkContentImport({ section, busy, onSave }) {
     setError("");
     const invalidEntry = preview.findIndex((item) => {
       if (!item.title.trim()) return true;
+      if (isHighlight) return !getHighlightSchedule(item);
       if (!isExperience) return false;
       const startDate = normalizedExperienceDate(item.startDate);
       if (!startDate) return true;
@@ -142,7 +152,9 @@ export default function BulkContentImport({ section, busy, onSave }) {
       setError(
         isExperience
           ? `Check entry ${invalidEntry + 1}: add a job title and start date (YYYY or YYYY-MM). Select “I currently work here” or enter an end date that is not before the start date.`
-          : `Add a title to entry ${invalidEntry + 1} before saving.`,
+          : isHighlight
+            ? `Check entry ${invalidEntry + 1}: add a title and valid Show from and Show until times in Philippines time.`
+            : `Add a title to entry ${invalidEntry + 1} before saving.`,
       );
       return;
     }
@@ -154,7 +166,6 @@ export default function BulkContentImport({ section, busy, onSave }) {
         setIntro(null);
       }
     } catch (saveError) {
-      console.error("Could not import drafts:", saveError);
       setError(saveError.message);
     }
   };
@@ -198,7 +209,9 @@ export default function BulkContentImport({ section, busy, onSave }) {
         Choose a .txt file or paste your text below. For multiple entries, put
         --- on a line by itself between them. Check the preview before saving.
         Imports are saved as drafts and are not published.
-        {!isLesson && " Add images or logos after importing."}
+        {isHighlight
+          ? " Add poster images after importing."
+          : !isLesson && " Add images or logos after importing."}
       </p>
       <details className="mt-3 text-sm text-[#526e6b] dark:text-white/70">
         <summary className="cursor-pointer font-semibold">
@@ -249,7 +262,10 @@ export default function BulkContentImport({ section, busy, onSave }) {
         needs a title.
         {isExperience &&
           " Use YYYY for a year (2024) or YYYY-MM for a month (2024-05). Select “I currently work here” to show Present."}
+        {isHighlight &&
+          " Use YYYY-MM-DD HH:mm and 24-hour time. All times use Philippines time."}
         {!isExperience &&
+          !isHighlight &&
           !isLesson &&
           " Links must start with https:// or http://."}
       </p>
@@ -320,7 +336,42 @@ export default function BulkContentImport({ section, busy, onSave }) {
                 </button>
               </div>
               {field(item, index, "title", isExperience ? "Role" : "Title")}
-              {isExperience ? (
+              {isHighlight ? (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium">Type</span>
+                    <select
+                      value={item.kind || "event"}
+                      onChange={(event) =>
+                        update(index, "kind", event.target.value)
+                      }
+                      className={fieldClass}
+                    >
+                      <option value="holiday">Holiday</option>
+                      <option value="event">Event</option>
+                    </select>
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {field(
+                      item,
+                      index,
+                      "startsAt",
+                      "Show from (Philippines time)",
+                      { type: "datetime-local" },
+                    )}
+                    {field(
+                      item,
+                      index,
+                      "endsAt",
+                      "Show until (Philippines time)",
+                      { type: "datetime-local" },
+                    )}
+                  </div>
+                  {field(item, index, "link", "Link (optional)", {
+                    type: "url",
+                  })}
+                </>
+              ) : isExperience ? (
                 <>
                   {field(item, index, "organization", "Company")}
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -365,9 +416,19 @@ export default function BulkContentImport({ section, busy, onSave }) {
                   {field(item, index, "date", "Date or year (optional)")}
                 </>
               )}
-              {field(item, index, "description", "Description (optional)", {
-                multiline: true,
-              })}
+              {field(
+                item,
+                index,
+                "description",
+                isHighlight
+                  ? "About this holiday or event (optional)"
+                  : "Description (optional)",
+                { multiline: true },
+              )}
+              {isHighlight &&
+                field(item, index, "significance", "Why it matters (optional)", {
+                  multiline: true,
+                })}
             </article>
           ))}
           <button

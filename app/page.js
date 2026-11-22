@@ -11,6 +11,11 @@ import VantaBirdsBackground from "./components/VantaBirdsBackground";
 import { HomeSkeleton } from "./components/PortfolioSkeleton";
 import RichTextContent from "./components/RichTextContent";
 import { formatExperienceDateRange } from "../lib/experienceDates";
+import {
+  formatManilaSchedule,
+  getHighlightSchedule,
+  isHighlightActive,
+} from "../lib/highlightSchedule.mjs";
 
 const EXPERIENCE_PAGE_SIZE = 3;
 
@@ -61,9 +66,18 @@ function DownloadIcon() {
 }
 
 export default function HomePage() {
-  const { home, about, contact, projects, experience, achievements, loading } =
-    usePortfolio();
+  const {
+    home,
+    about,
+    contact,
+    projects,
+    experience,
+    achievements,
+    highlights,
+    loading,
+  } = usePortfolio();
   const [experiencePage, setExperiencePage] = useState(0);
+  const [scheduleNow, setScheduleNow] = useState(0);
   const experiencePageCount = Math.ceil(
     experience.length / EXPERIENCE_PAGE_SIZE,
   );
@@ -81,6 +95,13 @@ export default function HomePage() {
     setExperiencePage(0);
   }, [experience.length]);
 
+  useEffect(() => {
+    const updateTime = () => setScheduleNow(Date.now());
+    updateTime();
+    const intervalId = window.setInterval(updateTime, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   if (loading) return <HomeSkeleton />;
 
   const initials = (home.name || "AN")
@@ -92,6 +113,9 @@ export default function HomePage() {
     .toUpperCase();
   const location = about.location || contact.location || "Manila, Philippines";
   const heroSummary = getHeroSummary(home.headline);
+  const visibleHighlights = highlights.filter((item) =>
+    isHighlightActive(item, scheduleNow),
+  );
   const statistics = [
     { value: projects.length, label: "Selected projects", href: "/projects" },
     { value: experience.length, label: "Work experiences", href: "/about" },
@@ -187,6 +211,125 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {visibleHighlights.length > 0 && (
+        <section
+          aria-labelledby="holidays-events-heading"
+          className="bg-[#f7faf9] py-20 dark:bg-[#09171d] md:py-28"
+        >
+          <div className="mx-auto max-w-7xl px-5 md:px-8">
+            <div className="mb-10 max-w-2xl">
+              <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#168e78] dark:text-[#5be0bf]">
+                Culture &amp; community
+              </p>
+              <h2
+                id="holidays-events-heading"
+                className="text-3xl font-semibold tracking-[-0.04em] text-[#122126] dark:text-white sm:text-5xl"
+              >
+                Holidays &amp; Events
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-[#68797c] dark:text-white/60 sm:text-base">
+                The stories behind the days we celebrate and the events that
+                bring people together.
+              </p>
+            </div>
+            <div className="space-y-7">
+              {visibleHighlights.map((item, index) => {
+                const schedule = getHighlightSchedule(item);
+
+                return (
+                <article
+                  key={item.id}
+                  style={{ animationDelay: `${Math.min(index * 110, 440)}ms` }}
+                  className="animate-highlight-card-enter group grid overflow-hidden rounded-[1.75rem] border border-[#cbded8] bg-[#16443f] shadow-[0_18px_50px_rgba(16,42,48,0.14)] transition duration-300 hover:-translate-y-1 hover:border-[#83cdb8] hover:shadow-[0_24px_60px_rgba(16,42,48,0.2)] motion-reduce:transform-none motion-reduce:transition-none lg:grid-cols-[minmax(0,0.62fr)_minmax(0,1.38fr)]"
+                >
+                  <div className="relative flex items-center justify-center overflow-hidden bg-[#16443f]">
+                    <PortfolioImage
+                      url={item.image?.url}
+                      alt={`${item.title} poster`}
+                      fallbackText=""
+                      fallbackClassName="hidden"
+                      objectFit="contain"
+                      transparent
+                      className="aspect-[3/4] w-full max-w-[32rem] bg-transparent lg:max-w-none"
+                    />
+                  </div>
+                  <div className="relative flex min-w-0 flex-col justify-center overflow-hidden bg-gradient-to-br from-[#16443f] via-[#16443f] to-[#102127] p-6 text-white sm:p-9 lg:p-12">
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.06]"
+                    />
+                    <div className="relative">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="rounded-full border border-[#5be0bf]/35 bg-[#5be0bf]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#a7eed9]">
+                          {item.kind === "holiday" ? "Holiday" : "Event"}
+                        </span>
+                        {schedule && (
+                          <time
+                            dateTime={new Date(schedule.startMs).toISOString()}
+                            className="inline-flex items-center gap-2 text-xs font-medium text-white/70 sm:text-sm"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 20 20"
+                              className="h-4 w-4 text-[#83e6ce]"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                            >
+                              <rect
+                                x="3"
+                                y="4.5"
+                                width="14"
+                                height="12"
+                                rx="2"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                d="M6.5 3v3M13.5 3v3M3 8h14"
+                              />
+                            </svg>
+                            {formatManilaSchedule(schedule)}
+                          </time>
+                        )}
+                      </div>
+                      <h3 className="mt-6 text-2xl font-semibold leading-tight tracking-[-0.03em] text-white sm:text-3xl lg:text-4xl">
+                        {item.title}
+                      </h3>
+                      {item.description && (
+                        <p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-white/75 sm:text-base sm:leading-8">
+                          {item.description}
+                        </p>
+                      )}
+                      {item.significance && (
+                        <div className="mt-7 rounded-2xl border border-[#5be0bf]/20 bg-white/[0.04] p-4 sm:p-5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#83e6ce]">
+                            Why it matters
+                          </p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-white/85 sm:text-base">
+                            {item.significance}
+                          </p>
+                        </div>
+                      )}
+                      {item.link && (
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#a7eed9] px-5 py-3 text-sm font-semibold text-[#0f292d] transition hover:bg-white motion-reduce:transition-none"
+                        >
+                          View event details <ArrowIcon />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {projects.length > 0 && (
         <section className="bg-[#edf4f1] py-20 dark:bg-[#0d1d23] md:py-28">

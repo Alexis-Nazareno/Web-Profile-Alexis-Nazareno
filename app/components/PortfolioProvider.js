@@ -14,6 +14,7 @@ import {
   defaultAchievements,
   defaultContact,
   defaultHome,
+  defaultHighlights,
   defaultProjects,
 } from "../../lib/portfolio";
 
@@ -24,6 +25,7 @@ const portfolioSources = [
   "projects",
   "experience",
   "achievements",
+  "highlights",
 ];
 
 const PortfolioContext = createContext({
@@ -33,6 +35,7 @@ const PortfolioContext = createContext({
   projects: defaultProjects,
   experience: [],
   achievements: defaultAchievements,
+  highlights: defaultHighlights,
   error: "",
   loading: false,
 });
@@ -44,6 +47,7 @@ export function PortfolioProvider({ children }) {
   const [projects, setProjects] = useState(defaultProjects);
   const [experience, setExperience] = useState([]);
   const [achievements, setAchievements] = useState(defaultAchievements);
+  const [highlights, setHighlights] = useState(defaultHighlights);
   const [errors, setErrors] = useState({});
   const [pendingSources, setPendingSources] = useState(
     () => new Set(isFirebaseConfigured ? portfolioSources : []),
@@ -146,6 +150,17 @@ export function PortfolioProvider({ children }) {
       },
       reportError("experience"),
     );
+    const unsubscribeHighlights = onSnapshot(
+      query(collection(db, "publicHighlights"), orderBy("order")),
+      (snapshot) => {
+        setHighlights(
+          snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
+        );
+        clearError("highlights");
+        markSourceSettled("highlights");
+      },
+      reportError("highlights"),
+    );
 
     return () => {
       unsubscribeHome();
@@ -154,6 +169,7 @@ export function PortfolioProvider({ children }) {
       unsubscribeProjects();
       unsubscribeAchievements();
       unsubscribeExperience();
+      unsubscribeHighlights();
     };
   }, []);
 
@@ -166,6 +182,7 @@ export function PortfolioProvider({ children }) {
         projects,
         experience,
         achievements,
+        highlights,
         error,
         loading,
       }}
