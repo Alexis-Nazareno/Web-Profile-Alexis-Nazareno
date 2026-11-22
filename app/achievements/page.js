@@ -18,16 +18,16 @@ export default function AchievementsPage() {
     <div className="mx-auto max-w-6xl px-5 py-16 md:px-8 md:py-24">
       <CollectionHeader
         eyebrow="Learning & growth"
-        title="Training and Certifications."
-        description="A record of continued learning across software development, cloud platforms, security, and modern engineering practices."
+        title="Learning that shapes my work."
+        description="Courses and certifications that help me grow as a software engineer and build better solutions."
         count={achievements.length}
-        countLabel={achievements.length === 1 ? "training or certificate" : "trainings and certificates"}
+        countLabel={achievements.length === 1 ? "course or certificate" : "courses and certificates"}
       />
       {achievements.length ? (
         <section className="mt-10 sm:mt-12" aria-labelledby="training-heading">
           <OrganizationFilters
             headingId="training-heading"
-            heading="Explore the learning journey"
+            heading="My training and certificates"
             allLabel="All training"
             groupLabel="Filter training and certificates by organization"
             total={achievements.length}

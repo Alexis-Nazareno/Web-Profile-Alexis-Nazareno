@@ -31,13 +31,9 @@ import {
 import { uploadCloudinaryFiles } from "../../lib/cloudinaryClient";
 import { adminUid, auth, db, isFirebaseConfigured } from "../../lib/firebase";
 import { MAX_MEMORY_IMAGES } from "../../lib/workMemories.mjs";
-import {
-  MAX_LESSON_IMPORT_BYTES,
-  MAX_LESSONS_PER_IMPORT,
-  parseLessonImport,
-} from "../../lib/lessonImport.mjs";
 import { socialPlatforms } from "../../lib/socialLinks.mjs";
 import {
+  MAX_ABOUT_PHOTOS,
   defaultAbout,
   defaultContact,
   defaultHome,
@@ -97,6 +93,7 @@ const newItem = (section, order) => ({
       ? {
           startDate: "",
           endDate: "",
+        isCurrent: true,
           organization: "",
           organizationLogo: null,
         }
@@ -133,10 +130,6 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState("success");
   const [error, setError] = useState("");
-  const [lessonImportText, setLessonImportText] = useState("");
-  const [lessonImportPreview, setLessonImportPreview] = useState([]);
-  const [lessonImportIntro, setLessonImportIntro] = useState(null);
-  const [lessonImportError, setLessonImportError] = useState("");
 
   useEffect(() => {
     if (!auth) {
@@ -179,6 +172,14 @@ export default function AdminPage() {
                 data.photo?.url && data.photo?.publicId ? data.photo : null,
               resume:
                 data.resume?.url && data.resume?.publicId ? data.resume : null,
+              photos: Array.isArray(data.photos)
+                ? data.photos.filter(
+                    (asset) =>
+                      asset &&
+                      typeof asset.url === "string" &&
+                      typeof asset.publicId === "string",
+                  )
+                : [],
             };
           }
         });
@@ -250,6 +251,12 @@ export default function AdminPage() {
                   endDate: hasStructuredDates
                     ? data.endDate || ""
                     : legacyDates?.endDate || "",
+                  isCurrent:
+                    typeof data.isCurrent === "boolean"
+                      ? data.isCurrent
+                      : !(hasStructuredDates
+                          ? data.endDate
+                          : legacyDates?.endDate),
                   datePrecision:
                     data.datePrecision || legacyDates?.datePrecision || "month",
                 };
@@ -404,6 +411,37 @@ export default function AdminPage() {
     }));
   };
 
+  const updateAboutDetail = (index, key, value) => {
+    const details = Array.isArray(sections.about.details)
+      ? sections.about.details
+      : [];
+    updateSection(
+      "about",
+      "details",
+      details.map((detail, detailIndex) =>
+        detailIndex === index ? { ...detail, [key]: value } : detail,
+      ),
+    );
+  };
+
+  const addAboutDetail = () => {
+    const details = Array.isArray(sections.about.details)
+      ? sections.about.details
+      : [];
+    updateSection("about", "details", [...details, { label: "", value: "" }]);
+  };
+
+  const removeAboutDetail = (index) => {
+    const details = Array.isArray(sections.about.details)
+      ? sections.about.details
+      : [];
+    updateSection(
+      "about",
+      "details",
+      details.filter((_, detailIndex) => detailIndex !== index),
+    );
+  };
+
   const updateItem = (section, id, key, value) => {
     setItems((current) => ({
       ...current,
@@ -442,13 +480,21 @@ export default function AdminPage() {
     }
 
     const isHomeMedia = section === "home";
+    const isAboutPhotos = section === "about" && field === "photos";
     const isExperienceLogo =
       section === "experience" && field === "organizationLogo";
-    const item = isHomeMedia
+    const item = isHomeMedia || isAboutPhotos
       ? null
-      : items[section].find((candidate) => candidate.id === itemId);
-    const currentImages = item?.images || [];
-    const maximumImages = section === "memories" ? MAX_MEMORY_IMAGES : 4;
+      : items[section]?.find((candidate) => candidate.id === itemId);
+    const currentImages = isAboutPhotos
+      ? sections.about.photos || []
+      : item?.images || [];
+    const maximumImages =
+      section === "memories"
+        ? MAX_MEMORY_IMAGES
+        : section === "about"
+          ? MAX_ABOUT_PHOTOS
+          : 4;
     if (
       (isHomeMedia ||
         isExperienceLogo ||
@@ -467,7 +513,9 @@ export default function AdminPage() {
       setError(
         section === "memories"
           ? "Memory albums can have up to 20 images."
-          : "Projects and certificates can have up to 4 images.",
+          : section === "about"
+            ? `About can have up to ${MAX_ABOUT_PHOTOS} photos.`
+            : "Projects and certificates can have up to 4 images.",
       );
       return;
     }
@@ -479,6 +527,14 @@ export default function AdminPage() {
       const uploadedAssets = await uploadCloudinaryFiles(files);
       if (isHomeMedia) {
         updateSection("home", field, uploadedAssets[0]);
+      } else if (isAboutPhotos) {
+        const nextPhotos = [...currentImages];
+        if (Number.isInteger(targetImageIndex)) {
+          nextPhotos[targetImageIndex] = uploadedAssets[0];
+        } else {
+          nextPhotos.push(...uploadedAssets);
+        }
+        updateSection("about", "photos", nextPhotos);
       } else if (isExperienceLogo) {
         updateItem(section, itemId, field, uploadedAssets[0]);
       } else {
@@ -498,11 +554,18 @@ export default function AdminPage() {
       );
       setMessageTone("success");
     } catch (uploadError) {
-      if (uploadError.uploadedAssets?.length && field === "images") {
-        updateItem(section, itemId, "images", [
-          ...currentImages,
-          ...uploadError.uploadedAssets,
-        ]);
+      if (uploadError.uploadedAssets?.length) {
+        if (isAboutPhotos) {
+          updateSection("about", "photos", [
+            ...currentImages,
+            ...uploadError.uploadedAssets,
+          ]);
+        } else if (field === "images") {
+          updateItem(section, itemId, "images", [
+            ...currentImages,
+            ...uploadError.uploadedAssets,
+          ]);
+        }
       }
       console.error("Could not upload portfolio media:", uploadError);
       setError(uploadError.message);
@@ -524,6 +587,14 @@ export default function AdminPage() {
     setMessage("");
     if (section === "home") {
       updateSection("home", field, null);
+    } else if (section === "about" && field === "photos") {
+      updateSection(
+        "about",
+        "photos",
+        (sections.about.photos || []).filter(
+          (currentAsset) => currentAsset.publicId !== asset.publicId,
+        ),
+      );
     } else if (field === "organizationLogo") {
       updateItem(section, item.id, field, null);
     } else {
@@ -550,6 +621,17 @@ export default function AdminPage() {
       images[index],
     ];
     updateItem(section, item.id, "images", images);
+  };
+
+  const shiftAboutPhoto = (index, direction) => {
+    const photos = [...(sections.about.photos || [])];
+    const destination = index + direction;
+    if (destination < 0 || destination >= photos.length) return;
+    [photos[index], photos[destination]] = [
+      photos[destination],
+      photos[index],
+    ];
+    updateSection("about", "photos", photos);
   };
 
   const saveSection = (section) => {
@@ -620,106 +702,16 @@ export default function AdminPage() {
     }));
   };
 
-  const prepareLessonImport = (text) => {
-    setLessonImportError("");
-    setLessonImportPreview([]);
-    setLessonImportIntro(null);
-    try {
-      if (new TextEncoder().encode(text).length > MAX_LESSON_IMPORT_BYTES) {
-        throw new Error("The text must be 512 KB or smaller.");
-      }
-      if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(text)) {
-        throw new Error("The text contains unsupported control characters.");
-      }
-      const { lessons, intro } = parseLessonImport(text);
-      setLessonImportPreview(lessons);
-      setLessonImportIntro(intro);
-    } catch (previewError) {
-      setLessonImportError(previewError.message);
-    }
-  };
-
-  const importLessons = async (files) => {
-    if (busy || uploading) {
-      setLessonImportError("Wait for the current action to finish before importing lessons.");
-      return;
-    }
-    setLessonImportError("");
-    setLessonImportPreview([]);
-    setLessonImportIntro(null);
-    if (files.length !== 1 || !/\.txt$/i.test(files[0].name)) {
-      setLessonImportError("Choose one .txt file to import work lessons.");
-      return;
-    }
-    if (files[0].size > MAX_LESSON_IMPORT_BYTES) {
-      setLessonImportError("The text file must be 512 KB or smaller.");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const bytes = await files[0].arrayBuffer();
-      let text;
-      try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      } catch {
-        throw new Error("Could not read the file as UTF-8 text. Save it as UTF-8 and try again.");
-      }
-      setLessonImportText(text);
-      prepareLessonImport(text);
-    } catch (importError) {
-      console.error("Could not read work lesson file:", importError);
-      setLessonImportError(importError.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveImportedLessons = async () => {
-    if (busy || uploading) {
-      setLessonImportError("Wait for the current action to finish before importing lessons.");
-      return;
-    }
-    if (lessonImportPreview.some((lesson) => !lesson.title.trim())) {
-      setLessonImportError("Add a title to each lesson before saving.");
-      return;
-    }
-    if (!window.confirm(
-      `Save ${lessonImportPreview.length} lesson${lessonImportPreview.length === 1 ? "" : "s"} as drafts? They will not be published. Save any edits to existing lessons first, as the list may refresh.`,
-    )) return;
-
-    setBusy(true);
-    setError("");
-    setMessage("");
-    setLessonImportError("");
-    try {
-      const firstOrder = items.lessons.reduce(
-        (lowest, item) => Math.min(lowest, Number(item.order) || 0),
-        0,
-      ) - lessonImportPreview.length;
-      const drafts = lessonImportPreview.map((lesson, index) => ({
-        ...newItem("lessons", firstOrder + index),
-        ...lesson,
-        title: lesson.title.trim(),
-        organization: lesson.organization.trim(),
-      }));
-      await saveImportedDrafts("lessons", drafts);
-      setMessage(`${drafts.length} lesson${drafts.length === 1 ? "" : "s"} imported as drafts. Review them before publishing.`);
-      setMessageTone("draft");
-      setLessonImportText("");
-      setLessonImportPreview([]);
-      setLessonImportIntro(null);
-    } catch (importError) {
-      console.error("Could not import work lessons:", importError);
-      setLessonImportError(importError.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const importContentDrafts = async (section, entries) => {
     if (busy || uploading) throw new Error("Wait for the current action to finish before importing.");
-    const name = section === "projects" ? "projects" : "training and certificates";
+    const names = {
+      experience: "experiences",
+      projects: "projects",
+      achievements: "training and certificates",
+      lessons: "work lessons",
+    };
+    const name = names[section];
+    if (!name) throw new Error("This section does not support bulk imports.");
     if (!window.confirm(
       `Save ${entries.length} ${name} as drafts? They will not be published. Save any edits to existing entries first, as the list may refresh.`,
     )) return false;
@@ -728,7 +720,12 @@ export default function AdminPage() {
     setError("");
     setMessage("");
     try {
-      const collectionName = section === "projects" ? "draftProjects" : "draftAchievements";
+      const collectionName = {
+        experience: "draftExperience",
+        projects: "draftProjects",
+        achievements: "draftAchievements",
+        lessons: "draftLessons",
+      }[section];
       const snapshot = await getDocs(collection(db, collectionName));
       const existing = [
         ...items[section],
@@ -744,11 +741,27 @@ export default function AdminPage() {
           ...entry,
           title: entry.title.trim(),
         };
+        if (section !== "projects") {
+          draft.organization = (entry.organization || "").trim();
+        }
         if (section === "projects") {
           draft.liveUrl = (entry.liveUrl || "").trim();
           draft.sourceUrl = (entry.sourceUrl || "").trim();
           draft.technologies = (entry.technologies || "")
             .split(",").map((value) => value.trim()).filter(Boolean);
+        }
+        if (section === "experience") {
+          const startDate = entry.startDate.trim();
+          const endDate = entry.endDate.trim();
+          draft.startDate = /^\d{4}$/.test(startDate)
+            ? `${startDate}-01`
+            : startDate;
+          draft.endDate = /^\d{4}$/.test(endDate)
+            ? `${endDate}-12`
+            : endDate;
+          draft.isCurrent = entry.isCurrent;
+          draft.datePrecision = entry.datePrecision;
+          draft.date = formatExperienceDateRange(draft);
         }
         return draft;
       });
@@ -771,8 +784,13 @@ export default function AdminPage() {
       return false;
     }
     if (section === "experience") {
+      const isCurrent = item.isCurrent ?? !item.endDate;
       if (item.endDate && !item.startDate) {
         setError("Choose a start date before entering an end date.");
+        return false;
+      }
+      if (!isCurrent && !item.endDate) {
+        setError("Choose an end date or mark this as your current role.");
         return false;
       }
       if (item.startDate && item.endDate && item.endDate < item.startDate) {
@@ -1169,6 +1187,75 @@ export default function AdminPage() {
                   value={sectionData.location}
                   onChange={(value) => updateSection(section, "location", value)}
                 />
+                <div className="rounded-xl border border-[#dce7e4] p-4 dark:border-white/10 sm:col-span-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold">More about you</h3>
+                      <p className="mt-1 text-sm text-[#65777a] dark:text-white/60">
+                        Add details like languages, interests, or work style. These show in My Perspective.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addAboutDetail}
+                      className="rounded-lg border border-[#45b69a] px-3 py-2 text-sm font-semibold text-[#126d5b] transition hover:bg-[#e8f7f2] dark:border-[#327d70] dark:text-[#83e6ce] dark:hover:bg-[#123a34]"
+                    >
+                      Add detail
+                    </button>
+                  </div>
+                  {(Array.isArray(sectionData.details)
+                    ? sectionData.details
+                    : []
+                  ).map((detail, index) => (
+                    <div
+                      key={index}
+                      className="mt-4 grid items-end gap-3 rounded-lg bg-[#f5f9f7] p-3 dark:bg-white/5 sm:grid-cols-[1fr_1.5fr_auto]"
+                    >
+                      <TextField
+                        label="Label"
+                        value={detail.label || ""}
+                        onChange={(value) =>
+                          updateAboutDetail(index, "label", value)
+                        }
+                      />
+                      <TextField
+                        label="Detail"
+                        value={detail.value || ""}
+                        onChange={(value) =>
+                          updateAboutDetail(index, "value", value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Remove detail ${index + 1}`}
+                        onClick={() => removeAboutDetail(index)}
+                        className="rounded-lg px-3 py-2 text-sm font-medium text-[#b42318] transition hover:bg-[#fff0f0] dark:text-[#ffaaa8] dark:hover:bg-[#3b1e20]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <AboutPhotoField
+                  images={Array.isArray(sectionData.photos)
+                    ? sectionData.photos
+                    : []}
+                  maximumImages={MAX_ABOUT_PHOTOS}
+                  busy={busy || uploading}
+                  onUpload={(event, photoIndex) =>
+                    uploadFiles(
+                      event,
+                      "about",
+                      "about",
+                      "photos",
+                      photoIndex,
+                    )
+                  }
+                  onRemove={(asset) =>
+                    removeAsset("about", sectionData, asset, "photos")
+                  }
+                  onMove={shiftAboutPhoto}
+                />
                 <TextField
                   label="Skills (comma separated)"
                   value={(sectionData.skills || []).join(", ")}
@@ -1295,125 +1382,15 @@ export default function AdminPage() {
                       : "certificate"}
             </button>
           </div>
-          {(section === "projects" || section === "achievements") && (
+          {["experience", "projects", "achievements", "lessons"].includes(
+            section,
+          ) && (
             <BulkContentImport
               key={section}
               section={section}
               busy={busy || uploading}
-              onSave={(entries) => importContentDrafts(section, entries)}
+              onSave={importContentDrafts}
             />
-          )}
-          {section === "lessons" && (
-            <div
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                void importLessons(Array.from(event.dataTransfer.files));
-              }}
-              className="rounded-2xl border border-dashed border-[#9bcdbd] bg-[#f2faf7] p-5 dark:border-[#2d705f] dark:bg-[#102a26]"
-            >
-              <p className="font-semibold">Import work lessons</p>
-              <p className="mt-1 text-sm leading-6 text-[#526e6b] dark:text-white/70">
-                Paste your text below or drop a UTF-8 .txt file here. Use headings
-                or --- between lessons when possible. Review and edit the preview
-                before saving; nothing is published automatically.
-              </p>
-              <label className="mt-4 inline-flex cursor-pointer rounded-lg border border-[#45b69a] bg-white px-4 py-2 font-medium text-[#126d5b] transition hover:bg-[#e8f7f2] focus-within:outline focus-within:outline-2 focus-within:outline-[#168e78] dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]">
-                Choose .txt file
-                <input
-                  type="file"
-                  accept=".txt,text/plain"
-                  disabled={busy || uploading}
-                  className="sr-only"
-                  onChange={(event) => {
-                    const files = Array.from(event.currentTarget.files || []);
-                    event.currentTarget.value = "";
-                    if (files.length) void importLessons(files);
-                  }}
-                />
-              </label>
-              <label className="mt-4 block">
-                <span className="mb-1 block text-sm font-medium">Paste lesson text</span>
-                <textarea
-                  rows={6}
-                  value={lessonImportText}
-                  onChange={(event) => {
-                    setLessonImportText(event.target.value);
-                    setLessonImportPreview([]);
-                    setLessonImportIntro(null);
-                    setLessonImportError("");
-                  }}
-                  placeholder="Paste your lessons here..."
-                  className="w-full rounded-lg border border-[#cbd9d5] bg-white px-3 py-2.5 text-[#122126] outline-none focus:border-[#22a98a] focus:ring-2 focus:ring-[#22a98a]/20 dark:border-white/15 dark:bg-[#0b1c22] dark:text-white"
-                />
-              </label>
-              <p className="mt-1 text-xs text-[#526e6b] dark:text-white/60">
-                Up to 512 KB and 200 lessons. A title is needed to save each draft; organization and description are optional.
-              </p>
-              <button
-                type="button"
-                disabled={busy || uploading}
-                onClick={() => prepareLessonImport(lessonImportText)}
-                className="mt-3 rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e]"
-              >
-                Preview lessons
-              </button>
-              {lessonImportError && (
-                <p role="alert" className="mt-3 text-sm text-[#b42318] dark:text-[#ffaaa8]">
-                  {lessonImportError}
-                </p>
-              )}
-              {lessonImportIntro && (
-                <div className="mt-4 rounded-lg border border-[#b8ccc5] p-3 text-sm dark:border-white/15">
-                  <p>Possible introduction excluded: <strong>{lessonImportIntro.title}</strong></p>
-                  <p className="mt-1 whitespace-pre-wrap">{lessonImportIntro.description}</p>
-                  <button
-                    type="button"
-                    disabled={lessonImportPreview.length >= MAX_LESSONS_PER_IMPORT}
-                    onClick={() => {
-                      setLessonImportPreview((current) => [lessonImportIntro, ...current]);
-                      setLessonImportIntro(null);
-                    }}
-                    className="mt-2 font-semibold text-[#126d5b] underline disabled:opacity-50 dark:text-[#83e6ce]"
-                  >
-                    Include as a lesson
-                  </button>
-                  {lessonImportPreview.length >= MAX_LESSONS_PER_IMPORT && (
-                    <p className="mt-1">Remove a lesson from the preview to include this introduction.</p>
-                  )}
-                </div>
-              )}
-              {lessonImportPreview.length > 0 && (
-                <div className="mt-5 space-y-4">
-                  <p className="font-semibold">Preview: {lessonImportPreview.length} lesson{lessonImportPreview.length === 1 ? "" : "s"}</p>
-                  {lessonImportPreview.map((lesson, index) => (
-                    <div key={index} className="space-y-3 rounded-xl border border-[#cbded7] bg-white p-4 dark:border-white/15 dark:bg-[#102127]">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold">Lesson {index + 1}</p>
-                        <button
-                          type="button"
-                          onClick={() => setLessonImportPreview((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                          className="text-sm font-medium text-[#b42318] underline dark:text-[#ffaaa8]"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                      <TextField label="Title" value={lesson.title} onChange={(value) => setLessonImportPreview((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: value } : item))} />
-                      <TextField label="Organization (optional)" value={lesson.organization} onChange={(value) => setLessonImportPreview((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, organization: value } : item))} />
-                      <TextField label="Description (optional)" multiline value={lesson.description} onChange={(value) => setLessonImportPreview((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: value } : item))} />
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    disabled={busy || uploading}
-                    onClick={() => void saveImportedLessons()}
-                    className="rounded-lg bg-[#168e78] px-4 py-2 font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e]"
-                  >
-                    Save as drafts
-                  </button>
-                </div>
-              )}
-            </div>
           )}
           {items[section].length === 0 && (
             <p className="text-gray-600 dark:text-gray-300">
@@ -1848,6 +1825,110 @@ function MediaField({
   );
 }
 
+function AboutPhotoField({
+  images,
+  maximumImages,
+  busy,
+  onUpload,
+  onRemove,
+  onMove,
+}) {
+  const atLimit = images.length >= maximumImages;
+
+  return (
+    <div className="rounded-xl border border-[#dce7e4] p-4 dark:border-white/10 sm:col-span-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">About photos</h3>
+          <p className="mt-1 text-sm text-[#65777a] dark:text-white/60">
+            Add up to {maximumImages} photos of yourself to your About page.
+            JPG, PNG, or WEBP; 5 MB max each. Photos appear in this order; use
+            Earlier or Later to rearrange them.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-4 py-2 text-sm font-semibold text-[#126d5b] transition hover:bg-[#d7f0e7] focus-within:ring-2 focus-within:ring-[#22a98a]/30 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]">
+          {atLimit ? "Photo limit reached" : "Add photos"}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="sr-only"
+            disabled={busy || atLimit}
+            onChange={(event) => onUpload(event, null)}
+          />
+        </label>
+      </div>
+      {images.length > 0 ? (
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {images.map((image, index) => (
+            <div
+              key={image.publicId}
+              className="rounded-xl border border-[#dce7e4] bg-[#f7fbfa] p-2 dark:border-white/10 dark:bg-[#0b1c22]/70"
+            >
+              <PortfolioImage
+                url={image.url}
+                alt={`Graduation photo ${index + 1}`}
+                className="h-28 w-full rounded-lg"
+              />
+              <p
+                className="mt-2 truncate text-xs font-medium"
+                title={image.name || `Graduation photo ${index + 1}`}
+              >
+                {image.name || `Graduation photo ${index + 1}`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  disabled={busy || index === 0}
+                  onClick={() => onMove(index, -1)}
+                  aria-label={`Move photo ${index + 1} earlier`}
+                  className="text-[#168e78] transition hover:text-[#0f766e] disabled:opacity-40 dark:text-[#5be0bf] dark:hover:text-[#a3f3df]"
+                >
+                  Earlier
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || index === images.length - 1}
+                  onClick={() => onMove(index, 1)}
+                  aria-label={`Move photo ${index + 1} later`}
+                  className="text-[#168e78] transition hover:text-[#0f766e] disabled:opacity-40 dark:text-[#5be0bf] dark:hover:text-[#a3f3df]"
+                >
+                  Later
+                </button>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#dce7e4] pt-2 dark:border-white/10">
+                <label className="cursor-pointer text-xs font-medium text-[#168e78] transition hover:text-[#0f766e] dark:text-[#5be0bf] dark:hover:text-[#a3f3df]">
+                  Replace
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={busy}
+                    onChange={(event) => onUpload(event, index)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onRemove(image)}
+                  className="text-xs font-medium text-red-600 transition hover:text-red-700 disabled:opacity-50 dark:text-[#ffaaa8] dark:hover:text-red-300"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-lg border border-dashed border-[#cbd9d5] px-4 py-5 text-center text-sm text-[#65777a] dark:border-white/15 dark:text-white/50">
+          No photos added yet. Your About page stays unchanged until you add and
+          publish photos.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ItemEditor({
   section,
   item,
@@ -1867,6 +1948,7 @@ function ItemEditor({
   const isExperience = section === "experience";
   const isMemory = section === "memories";
   const isLesson = section === "lessons";
+  const isCurrentExperience = item.isCurrent ?? !item.endDate;
   const images = item.images || [];
   const maximumImages = isMemory ? MAX_MEMORY_IMAGES : 4;
   const itemType = isProject
@@ -1936,14 +2018,38 @@ function ItemEditor({
               onChange("startDate", value);
             }}
           />
-          <MonthPicker
-            label="End date (optional)"
-            value={item.endDate}
-            onChange={(value) => {
-              onChange("datePrecision", "month");
-              onChange("endDate", value);
-            }}
-          />
+          {isCurrentExperience ? (
+            <div>
+              <span className="mb-1 block">End date</span>
+              <p className="rounded-lg border border-[#cbd9d5] bg-[#f2faf7] px-3 py-2.5 font-medium text-[#126d5b] dark:border-white/15 dark:bg-[#0b1c22] dark:text-[#83e6ce]">
+                Present
+              </p>
+            </div>
+          ) : (
+            <MonthPicker
+              label="End date"
+              required
+              value={item.endDate}
+              onChange={(value) => {
+                onChange("datePrecision", "month");
+                onChange("endDate", value);
+              }}
+            />
+          )}
+          <label className="flex items-center gap-2 text-sm text-[#526e6b] dark:text-white/70 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={isCurrentExperience}
+              disabled={busy}
+              onChange={(event) => {
+                const isCurrent = event.target.checked;
+                onChange("isCurrent", isCurrent);
+                if (isCurrent) onChange("endDate", "");
+              }}
+              className="h-4 w-4 accent-[#168e78]"
+            />
+            I currently work here
+          </label>
           <TextField
             label="Organization"
             value={item.organization}
@@ -1951,8 +2057,8 @@ function ItemEditor({
             className="sm:col-span-2"
           />
           <p className="text-sm leading-6 text-[#667779] dark:text-white/60 sm:col-span-2">
-            Leave the end date blank for a current role. Multiple experiences
-            can be current at the same time.
+            Select “I currently work here” to show Present as the end date.
+            Multiple experiences can be current at the same time.
           </p>
           {item.date && !item.startDate && (
             <p className="text-sm leading-6 text-[#805a0c] dark:text-[#f6dc9a] sm:col-span-2">

@@ -1,6 +1,17 @@
-export default function SectionHeading({ eyebrow, title, description }) {
+export default function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  centered = false,
+}) {
   return (
-    <div className="max-w-3xl">
+    <div
+      className={
+        centered
+          ? "mx-auto max-w-4xl text-center"
+          : "max-w-3xl"
+      }
+    >
       {eyebrow && (
         <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#168e78] dark:text-[#5be0bf]">
           {eyebrow}
@@ -10,7 +21,11 @@ export default function SectionHeading({ eyebrow, title, description }) {
         {title}
       </h1>
       {description && (
-        <p className="mt-5 max-w-2xl text-base leading-7 text-[#607078] dark:text-white/65 sm:text-lg sm:leading-8">
+        <p
+          className={`mt-5 max-w-2xl text-base leading-7 text-[#607078] dark:text-white/65 sm:text-lg sm:leading-8 ${
+            centered ? "mx-auto" : ""
+          }`}
+        >
           {description}
         </p>
       )}
