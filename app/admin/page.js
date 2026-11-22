@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   collection,
   doc,
@@ -148,6 +148,7 @@ export default function AdminPage() {
   const [feedbackSubmissions, setFeedbackSubmissions] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("home");
+  const [newItemSelection, setNewItemSelection] = useState(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
@@ -836,6 +837,8 @@ export default function AdminPage() {
       ...current,
       [section]: [nextItem, ...current[section]],
     }));
+    setNewItemSelection({ section, id: nextItem.id });
+    return nextItem.id;
   };
 
   const importContentDrafts = (section, entries) => {
@@ -1070,10 +1073,7 @@ export default function AdminPage() {
       confirmLabel: "Delete",
       destructive: true,
       onConfirm: () => {
-        if (
-          ["memories", "lessons", "projects", "achievements", "highlights"].includes(section) &&
-          item.status === "unsaved"
-        ) {
+        if (item.status === "unsaved") {
           setItems((current) => ({
             ...current,
             [section]: current[section].filter((entry) => entry.id !== item.id),
@@ -1689,6 +1689,11 @@ export default function AdminPage() {
               error={highlightsError}
               busy={busy || uploading}
               onAdd={() => addItem("highlights")}
+              newItemId={
+                newItemSelection?.section === "highlights"
+                  ? newItemSelection.id
+                  : null
+              }
               onChange={(id, key, value) =>
                 updateItem("highlights", id, key, value)
               }
@@ -1767,6 +1772,11 @@ export default function AdminPage() {
               key={`items-${section}`}
               section={section}
               items={items[section]}
+              newItemId={
+                newItemSelection?.section === section
+                  ? newItemSelection.id
+                  : null
+              }
               busy={busy || uploading}
               onChange={(id, key, value) => updateItem(section, id, key, value)}
               onUpload={(event, id, field, imageIndex) =>
@@ -1868,6 +1878,7 @@ function HighlightKindBadge({ kind }) {
 
 function HighlightsManager({
   items,
+  newItemId,
   loading,
   error,
   busy,
@@ -1885,6 +1896,8 @@ function HighlightsManager({
   const [scheduleNow, setScheduleNow] = useState(0);
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
+  const cardListRef = useRef(null);
+  const editorRef = useRef(null);
   const pendingItems = getPendingHighlightItems(items);
   const pendingReadiness = pendingItems.map((item) => ({
     item,
@@ -1933,6 +1946,21 @@ function HighlightsManager({
     const intervalId = window.setInterval(updateTime, 30_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!newItemId) return;
+    setFilter("all");
+    setEditingId(newItemId);
+    cardListRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+  }, [newItemId]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    editorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [editingId]);
 
   return (
     <section className="space-y-4 rounded-2xl border border-[#dce7e4] bg-[#f7fbfa] p-5 dark:border-white/10 dark:bg-[#0b1c22]/70">
@@ -2092,6 +2120,7 @@ function HighlightsManager({
       {!loading && !error && visibleItems.length > 0 && (
         <div className="space-y-4">
           <div
+            ref={cardListRef}
             role="list"
             aria-label="Holiday and event items"
             className="grid auto-cols-[80%] grid-flow-col gap-3 overflow-x-auto pb-2 snap-x snap-mandatory sm:auto-cols-[48%] lg:auto-cols-[31%] xl:auto-cols-[18.5%]"
@@ -2163,19 +2192,21 @@ function HighlightsManager({
             ))}
           </div>
           {editingItem && (
-            <HighlightEditor
-              item={editingItem}
-              scheduleNow={scheduleNow}
-              busy={busy}
-              onChange={onChange}
-              onUpload={onUpload}
-              onRemoveImage={onRemoveImage}
-              onSave={onSave}
-              onPublish={onPublish}
-              onUnpublish={onUnpublish}
-              onDelete={onDelete}
-              onClose={() => setEditingId(null)}
-            />
+            <div ref={editorRef} className="scroll-mt-6">
+              <HighlightEditor
+                item={editingItem}
+                scheduleNow={scheduleNow}
+                busy={busy}
+                onChange={onChange}
+                onUpload={onUpload}
+                onRemoveImage={onRemoveImage}
+                onSave={onSave}
+                onPublish={onPublish}
+                onUnpublish={onUnpublish}
+                onDelete={onDelete}
+                onClose={() => setEditingId(null)}
+              />
+            </div>
           )}
         </div>
       )}
@@ -2298,12 +2329,16 @@ function HighlightEditor({
           />
         </div>
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-[#dce7e4] pt-4 dark:border-white/10">
+      <div
+        className={`grid gap-2 border-t border-[#dce7e4] pt-4 dark:border-white/10 ${
+          item.published ? "grid-cols-2" : "grid-cols-3"
+        } sm:flex sm:flex-wrap sm:items-center`}
+      >
         <button
           type="button"
           disabled={busy}
           onClick={() => onSave(item)}
-          className="rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-3 py-2 text-sm font-semibold text-[#126d5b] transition hover:bg-[#d7f0e7] disabled:opacity-50 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f]"
+          className="min-w-0 rounded-lg border border-[#45b69a] bg-[#e8f7f2] px-2 py-2 text-xs font-semibold text-[#126d5b] transition hover:bg-[#d7f0e7] disabled:opacity-50 dark:border-[#327d70] dark:bg-[#123a34] dark:text-[#83e6ce] dark:hover:bg-[#18483f] sm:px-3 sm:text-sm"
         >
           Save draft
         </button>
@@ -2311,16 +2346,18 @@ function HighlightEditor({
           type="button"
           disabled={busy}
           onClick={() => onPublish(item)}
-          className="rounded-lg bg-[#168e78] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce]"
+          aria-label="Publish on homepage"
+          className="min-w-0 rounded-lg bg-[#168e78] px-2 py-2 text-xs font-semibold text-white transition hover:bg-[#0f766e] disabled:opacity-50 dark:bg-[#4ed8b6] dark:text-[#09201e] dark:hover:bg-[#7ce9ce] sm:px-3 sm:text-sm"
         >
-          Publish on homepage
+          <span className="sm:hidden">Publish</span>
+          <span className="hidden sm:inline">Publish on homepage</span>
         </button>
         {item.published && (
           <button
             type="button"
             disabled={busy}
             onClick={() => onUnpublish(item)}
-            className="rounded-lg border border-[#e4b54a] bg-[#fff7e6] px-3 py-2 text-sm font-semibold text-[#8a5a00] transition hover:bg-[#ffefcc] disabled:opacity-50 dark:border-[#8c6925] dark:bg-[#3b2e13] dark:text-[#f6d27e] dark:hover:bg-[#493717]"
+            className="min-w-0 rounded-lg border border-[#e4b54a] bg-[#fff7e6] px-2 py-2 text-xs font-semibold text-[#8a5a00] transition hover:bg-[#ffefcc] disabled:opacity-50 dark:border-[#8c6925] dark:bg-[#3b2e13] dark:text-[#f6d27e] dark:hover:bg-[#493717] sm:px-3 sm:text-sm"
           >
             Unpublish
           </button>
@@ -2329,7 +2366,7 @@ function HighlightEditor({
           type="button"
           disabled={busy}
           onClick={() => onDelete(item)}
-          className="ml-auto rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#ffe0e0] disabled:opacity-50 dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528]"
+          className="min-w-0 rounded-lg border border-[#ef9a9a] bg-[#fff0f0] px-2 py-2 text-xs font-semibold text-[#b42318] transition hover:bg-[#ffe0e0] disabled:opacity-50 dark:border-[#78383b] dark:bg-[#3b1e20] dark:text-[#ffaaa8] dark:hover:bg-[#4a2528] sm:ml-auto sm:px-3 sm:text-sm"
         >
           Delete
         </button>
@@ -2941,6 +2978,7 @@ function AboutPhotoField({
 function ContentItemsManager({
   section,
   items,
+  newItemId,
   busy,
   onChange,
   onUpload,
@@ -2954,7 +2992,23 @@ function ContentItemsManager({
   onDelete,
 }) {
   const [editingId, setEditingId] = useState(null);
+  const cardListRef = useRef(null);
+  const editorRef = useRef(null);
   const editingItem = items.find((item) => item.id === editingId);
+
+  useEffect(() => {
+    if (!newItemId) return;
+    setEditingId(newItemId);
+    cardListRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+  }, [newItemId]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    editorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [editingId]);
 
   const summaryFor = (item) => {
     if (section === "experience") {
@@ -2977,6 +3031,7 @@ function ContentItemsManager({
   return (
     <div className="space-y-4">
       <div
+        ref={cardListRef}
         role="list"
         aria-label={`${section} items`}
         className="grid auto-cols-[80%] grid-flow-col gap-3 overflow-x-auto pb-2 snap-x snap-mandatory sm:auto-cols-[48%] lg:auto-cols-[31%] xl:auto-cols-[18.5%]"
@@ -3057,27 +3112,29 @@ function ContentItemsManager({
       </div>
 
       {editingItem && (
-        <ItemEditor
-          section={section}
-          item={editingItem}
-          busy={busy}
-          onChange={(key, value) => onChange(editingItem.id, key, value)}
-          onUpload={(event, field, imageIndex) =>
-            onUpload(event, editingItem.id, field, imageIndex)
-          }
-          onReplaceImage={(event, imageIndex) =>
-            onReplaceImage(event, editingItem.id, imageIndex)
-          }
-          onRemoveImage={(asset) => onRemoveImage(editingItem, asset)}
-          onRemoveLogo={(asset) => onRemoveLogo(editingItem, asset)}
-          onMoveImage={(index, direction) =>
-            onMoveImage(editingItem, index, direction)
-          }
-          onSave={() => onSave(editingItem)}
-          onPublish={() => onPublish(editingItem)}
-          onUnpublish={() => onUnpublish(editingItem)}
-          onDelete={() => onDelete(editingItem)}
-        />
+        <div ref={editorRef} className="scroll-mt-6">
+          <ItemEditor
+            section={section}
+            item={editingItem}
+            busy={busy}
+            onChange={(key, value) => onChange(editingItem.id, key, value)}
+            onUpload={(event, field, imageIndex) =>
+              onUpload(event, editingItem.id, field, imageIndex)
+            }
+            onReplaceImage={(event, imageIndex) =>
+              onReplaceImage(event, editingItem.id, imageIndex)
+            }
+            onRemoveImage={(asset) => onRemoveImage(editingItem, asset)}
+            onRemoveLogo={(asset) => onRemoveLogo(editingItem, asset)}
+            onMoveImage={(index, direction) =>
+              onMoveImage(editingItem, index, direction)
+            }
+            onSave={() => onSave(editingItem)}
+            onPublish={() => onPublish(editingItem)}
+            onUnpublish={() => onUnpublish(editingItem)}
+            onDelete={() => onDelete(editingItem)}
+          />
+        </div>
       )}
     </div>
   );
