@@ -34,6 +34,8 @@ import {
   unpublishDraft,
 } from "../../lib/contentAdmin";
 import { uploadCloudinaryFiles } from "../../lib/cloudinaryClient";
+import { certificateFileAccept, isCertificateFile } from "../../lib/certificateFiles.mjs";
+import { splitTrainingAndWorkAchievements } from "../../lib/workAchievements.mjs";
 import { adminUid, auth, db, isFirebaseConfigured } from "../../lib/firebase";
 import { MAX_MEMORY_IMAGES } from "../../lib/workMemories.mjs";
 import { socialPlatforms } from "../../lib/socialLinks.mjs";
@@ -66,6 +68,7 @@ const tabs = [
   ["experience", "Experience"],
   ["projects", "Projects"],
   ["achievements", "Training & Certificates"],
+  ["workAchievements", "Work Achievements"],
   ["memories", "Work Memories"],
   ["lessons", "Work Lessons"],
   ["feedback", "Feedback"],
@@ -77,6 +80,7 @@ const itemLabels = {
   projects: "Project",
   experience: "Experience",
   achievements: "Training / Certificate",
+  workAchievements: "Work achievement",
   highlights: "Holiday / event",
   memories: "Memory album",
   lessons: "Work lesson",
@@ -122,6 +126,7 @@ const newItem = (section, order) => ({
           }
       : { date: "", organization: "" }),
   images: [],
+  ...(section === "workAchievements" ? { contentType: "workAchievement", document: null } : {}),
   published: false,
   status: "unsaved",
   order,
@@ -138,6 +143,7 @@ export default function AdminPage() {
     experience: [],
     projects: [],
     achievements: [],
+    workAchievements: [],
     highlights: [],
     memories: [],
     lessons: [],
@@ -323,12 +329,19 @@ export default function AdminPage() {
               };
             });
           const savedIds = new Set(savedItems.map((item) => item.id));
-          const unsavedItems = current.achievements.filter(
+          const { training, workAchievements } = splitTrainingAndWorkAchievements(savedItems);
+          const unsavedItems = (section) => current[section].filter(
             (item) => item.status === "unsaved" && !savedIds.has(item.id),
           );
           return {
             ...current,
-            achievements: [...unsavedItems, ...savedItems].sort(
+            achievements: [...unsavedItems("achievements"), ...training].sort(
+              (left, right) => (left.order || 0) - (right.order || 0),
+            ),
+            workAchievements: [
+              ...unsavedItems("workAchievements"),
+              ...workAchievements.map((item) => ({ ...item, contentType: "workAchievement" })),
+            ].sort(
               (left, right) => (left.order || 0) - (right.order || 0),
             ),
           };
@@ -609,15 +622,18 @@ export default function AdminPage() {
     if (!files.length) return;
 
     const isPdf = field === "resume";
+    const isCertificateDocument = section === "workAchievements" && field === "document";
     const isHighlightImage = section === "highlights" && field === "image";
     const allowedTypes = isPdf
       ? ["application/pdf"]
       : isHighlightImage
         ? ["image/jpeg", "image/png", "image/webp", "image/gif"]
         : ["image/jpeg", "image/png", "image/webp"];
-    if (files.some((file) => !allowedTypes.includes(file.type))) {
+    if (files.some((file) => isCertificateDocument ? !isCertificateFile(file) : !allowedTypes.includes(file.type))) {
       showActionError(
-        isPdf
+        isCertificateDocument
+          ? "Choose a PDF, DOC, or DOCX certificate file."
+          : isPdf
           ? "Choose a PDF file for the CV."
           : isHighlightImage
             ? "Choose JPG, PNG, WEBP, or GIF images only."
@@ -626,7 +642,7 @@ export default function AdminPage() {
       return;
     }
     if (files.some((file) => file.size > 5 * 1024 * 1024)) {
-      showActionError("Each image or PDF must be 5 MB or smaller.");
+      showActionError("Each file must be 5 MB or smaller.");
       return;
     }
 
@@ -652,6 +668,7 @@ export default function AdminPage() {
       (isHomeMedia ||
         isHighlightImage ||
         isExperienceLogo ||
+        isCertificateDocument ||
         Number.isInteger(targetImageIndex)) &&
       files.length !== 1
     ) {
@@ -662,6 +679,7 @@ export default function AdminPage() {
       !isHomeMedia &&
       !isHighlightImage &&
       !isExperienceLogo &&
+      !isCertificateDocument &&
       !Number.isInteger(targetImageIndex) &&
       currentImages.length + files.length > maximumImages
     ) {
@@ -696,7 +714,7 @@ export default function AdminPage() {
         updateSection("about", "photos", nextPhotos);
       } else if (isHighlightImage) {
         updateItem(section, itemId, "image", uploadedAssets[0]);
-      } else if (isExperienceLogo) {
+      } else if (isExperienceLogo || isCertificateDocument) {
         updateItem(section, itemId, field, uploadedAssets[0]);
       } else {
         if (Number.isInteger(targetImageIndex)) {
@@ -760,7 +778,7 @@ export default function AdminPage() {
               (currentAsset) => currentAsset.publicId !== asset.publicId,
             ),
           );
-        } else if (field === "organizationLogo") {
+        } else if (field === "organizationLogo" || field === "document") {
           updateItem(section, item.id, field, null);
         } else {
           updateItem(
@@ -984,6 +1002,10 @@ export default function AdminPage() {
     }
     if (section === "memories" && !item.organization.trim()) {
       showActionError("Please enter a company for this memory album.");
+      return false;
+    }
+    if (section === "workAchievements" && publishing && !item.document) {
+      showActionError("Upload a PDF or Word document before publishing this work achievement.");
       return false;
     }
     if (section === "highlights" && publishing && !item.image) {
@@ -1803,6 +1825,8 @@ export default function AdminPage() {
                     ? "Work Memories"
                     : section === "lessons"
                       ? "Work Lessons"
+                      : section === "workAchievements"
+                        ? "Work Achievements"
                       : "Training & Certificates"}
             </h2>
             <button
@@ -1819,6 +1843,8 @@ export default function AdminPage() {
                     ? "memory album"
                     : section === "lessons"
                       ? "lesson"
+                      : section === "workAchievements"
+                        ? "work achievement"
                       : "certificate"}
             </button>
           </div>
@@ -1837,7 +1863,7 @@ export default function AdminPage() {
               No {section} yet. Add one to get started.
             </p>
           )}
-          {["experience", "projects", "achievements", "lessons"].includes(
+          {["experience", "projects", "achievements", "workAchievements", "lessons"].includes(
             section,
           ) ? (
             <ContentItemsManager
@@ -1862,6 +1888,9 @@ export default function AdminPage() {
               }
               onRemoveLogo={(item, asset) =>
                 removeAsset(section, item, asset, "organizationLogo")
+              }
+              onRemoveDocument={(item, asset) =>
+                removeAsset(section, item, asset, "document")
               }
               onMoveImage={(item, index, direction) =>
                 shiftImage(section, item, index, direction)
@@ -3041,6 +3070,7 @@ function MediaField({
   objectFit = "cover",
   transparent = false,
   isPdf = false,
+  isDocument = false,
   busy,
   onUpload,
   onRemove,
@@ -3050,7 +3080,7 @@ function MediaField({
       <span className="mb-2 block font-medium">{label}</span>
       <div className="flex min-h-[7rem] min-w-0 flex-col items-stretch gap-3 rounded-xl border border-[#dce7e4] bg-[#f7fbfa] p-3 dark:border-white/10 dark:bg-[#0b1c22]/70 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex w-full min-w-0 items-center gap-3 lg:w-auto lg:flex-1">
-          {asset?.url && !isPdf && (
+          {asset?.url && !isPdf && !isDocument && (
             <>
               <PortfolioImage
                 url={asset.url}
@@ -3072,26 +3102,26 @@ function MediaField({
               </div>
             </>
           )}
-          {asset?.url && isPdf && (
+          {asset?.url && (isPdf || isDocument) && (
             <a
               href={asset.url}
               target="_blank"
               rel="noreferrer"
-              title={`Preview ${asset.name || "CV PDF"}`}
+              title={`Open ${asset.name || "file"}`}
               className="flex min-w-0 flex-1 items-center gap-3 text-sm font-medium text-[#168e78] transition hover:text-[#0f766e] dark:text-[#5be0bf] dark:hover:text-[#a3f3df]"
             >
               <span
                 aria-hidden="true"
                 className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[#e8f7f2] text-xs font-bold tracking-wide text-[#126d5b] dark:bg-[#123a34] dark:text-[#83e6ce]"
               >
-                PDF
+                {isPdf ? "PDF" : "FILE"}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-medium uppercase tracking-wide text-[#667779] dark:text-white/55">
-                  File name · click to preview
+                  File name · click to open
                 </span>
                 <span className="line-clamp-2 break-words underline">
-                  {asset.name || "CV PDF"}
+                  {asset.name || "File"}
                 </span>
               </span>
             </a>
@@ -3243,6 +3273,7 @@ function ContentItemsManager({
   onReplaceImage,
   onRemoveImage,
   onRemoveLogo,
+  onRemoveDocument,
   onMoveImage,
   onSave,
   onPublish,
@@ -3277,7 +3308,7 @@ function ContentItemsManager({
         ? item.technologies.slice(0, 3).join(", ")
         : "";
     }
-    if (section === "achievements") {
+    if (section === "achievements" || section === "workAchievements") {
       return [item.organization, item.date].filter(Boolean).join(" · ");
     }
     return item.organization || "Work lesson";
@@ -3304,6 +3335,8 @@ function ContentItemsManager({
                 ? "PROJECT"
                 : section === "achievements"
                   ? "TRAINING"
+                  : section === "workAchievements"
+                    ? "ACHIEVEMENT"
                   : "LESSON";
 
           return (
@@ -3384,6 +3417,7 @@ function ContentItemsManager({
             }
             onRemoveImage={(asset) => onRemoveImage(editingItem, asset)}
             onRemoveLogo={(asset) => onRemoveLogo(editingItem, asset)}
+            onRemoveDocument={(asset) => onRemoveDocument(editingItem, asset)}
             onMoveImage={(index, direction) =>
               onMoveImage(editingItem, index, direction)
             }
@@ -3407,6 +3441,7 @@ function ItemEditor({
   onReplaceImage,
   onRemoveImage,
   onRemoveLogo,
+  onRemoveDocument,
   onMoveImage,
   onSave,
   onPublish,
@@ -3417,6 +3452,7 @@ function ItemEditor({
   const isExperience = section === "experience";
   const isMemory = section === "memories";
   const isLesson = section === "lessons";
+  const isWorkAchievement = section === "workAchievements";
   const isCurrentExperience = item.isCurrent ?? !item.endDate;
   const images = item.images || [];
   const maximumImages = isMemory ? MAX_MEMORY_IMAGES : 4;
@@ -3428,6 +3464,8 @@ function ItemEditor({
         ? "memory album"
         : isLesson
           ? "lesson"
+          : isWorkAchievement
+            ? "work achievement"
           : "certificate";
 
   return (
@@ -3569,7 +3607,24 @@ function ItemEditor({
         />
       )}
 
-      {!isExperience && !isLesson && (
+      {isWorkAchievement && (
+        <div className="space-y-2">
+          <MediaField
+            label="Achievement document (PDF, DOC, or DOCX; 5 MB max)"
+            asset={item.document}
+            accept={certificateFileAccept}
+            isDocument
+            busy={busy}
+            onUpload={(event) => onUpload(event, "document", null)}
+            onRemove={() => item.document && onRemoveDocument(item.document)}
+          />
+          <p className="text-sm text-[#667779] dark:text-white/60">
+            Publish this entry to show its document on the Work Achievements page. Removed or replaced files remain in Cloudinary.
+          </p>
+        </div>
+      )}
+
+      {!isExperience && !isLesson && (!isWorkAchievement || images.length > 0) && (
         <div>
           <span className="mb-2 block">
             Images (up to {maximumImages}; JPG, PNG, or WEBP; 5 MB max each)

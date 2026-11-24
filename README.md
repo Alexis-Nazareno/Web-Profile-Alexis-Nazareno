@@ -1,12 +1,13 @@
 # Portfolio CMS
 
 This Next.js application uses Firebase Authentication and Cloud Firestore for
-the admin dashboard and published portfolio content. Images and the CV PDF
-are uploaded directly to Cloudinary using an unsigned upload preset. Vercel
+the admin dashboard and published portfolio content. Images, the CV PDF, and
+certificate documents are uploaded directly to Cloudinary using an unsigned
+upload preset. Vercel
 hosts the site; no custom server or Cloud Functions are used.
 
 The admin dashboard at `/admin` manages Home, About, Contact, Experience,
-Projects, Training & Certificates, Work Memories, and Work Lessons. Published Firestore documents update
+Projects, Training & Certificates, Work Achievements, Work Memories, and Work Lessons. Published Firestore documents update
 the public pages live. The CV import button works only when the CMS collections
 are empty; it publishes CV text, work history, projects, and training records.
 It does not upload the original CV or any photos.
@@ -39,8 +40,8 @@ or require a Cloudinary API secret or Firebase service account key.
 
 1. In Cloudinary Console, open **Settings → Upload → Upload presets** and
    create an upload preset with **Signing Mode: Unsigned**.
-2. Set its allowed formats to JPG, PNG, WEBP, and PDF. The app accepts images
-   and PDFs up to 5 MB each and checks both the MIME type and file size before
+2. Set its allowed formats to JPG, PNG, WEBP, GIF, PDF, DOC, and DOCX. The app accepts images
+   and documents up to 5 MB each and checks file type and size before
    upload. The preset name is not a secret, so restrict the preset to only the
    formats and upload options this portfolio needs.
 3. In Cloudinary security settings, enable **Allow delivery of PDF and ZIP
@@ -48,10 +49,18 @@ or require a Cloudinary API secret or Firebase service account key.
 4. Copy the Cloudinary cloud name and unsigned preset name into the two
    environment variables above, both locally and in Vercel.
 
-Images use Cloudinary's image upload endpoint; CV PDFs use its raw file upload
+Images use Cloudinary's image upload endpoint; CV PDFs and certificate documents use its raw file upload
 endpoint. Each related Firestore content document stores the secure URL and
 Cloudinary public ID. The profile supports one image; each project or
 certificate supports up to four images.
+In **Work Achievements** (next to Training & Certificates in the dashboard),
+upload one PDF, DOC, or DOCX document per entry, then publish the entry to show
+the file on the **Work achievements** footer page. These entries are separate
+from the public training page. Previously uploaded document entries appear in
+Work Achievements. Saving a draft does not update the public page.
+Word files may download rather than preview in the browser. Ensure documents
+are suitable for public access. Cloudinary account security and upload preset
+settings must permit upload and delivery of these file types.
 Each Work Memories album is independent of the Experience entries and can
 contain up to 20 photos. Add a company, title, optional date and description,
 then save a draft or publish it. Work Lessons can be saved and published
