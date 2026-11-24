@@ -11,6 +11,7 @@ export default function PortfolioImage({
   fallbackClassName = "text-5xl font-semibold tracking-tight",
   objectFit = "cover",
   transparent = false,
+  onImageLoad,
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -53,6 +54,7 @@ export default function PortfolioImage({
         unoptimized
         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 40vw"
         className={objectFit === "contain" ? "object-contain" : "object-cover"}
+        onLoad={onImageLoad}
         onError={() => setFailed(true)}
       />
     </div>

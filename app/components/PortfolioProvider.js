@@ -9,6 +9,7 @@ import {
   query,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "../../lib/firebase";
+import { splitTrainingAndWorkAchievements } from "../../lib/workAchievements.mjs";
 import {
   defaultAbout,
   defaultAchievements,
@@ -35,6 +36,7 @@ const PortfolioContext = createContext({
   projects: defaultProjects,
   experience: [],
   achievements: defaultAchievements,
+  workAchievements: [],
   highlights: defaultHighlights,
   error: "",
   loading: false,
@@ -47,6 +49,7 @@ export function PortfolioProvider({ children }) {
   const [projects, setProjects] = useState(defaultProjects);
   const [experience, setExperience] = useState([]);
   const [achievements, setAchievements] = useState(defaultAchievements);
+  const [workAchievements, setWorkAchievements] = useState([]);
   const [highlights, setHighlights] = useState(defaultHighlights);
   const [errors, setErrors] = useState({});
   const [pendingSources, setPendingSources] = useState(
@@ -131,9 +134,11 @@ export function PortfolioProvider({ children }) {
     const unsubscribeAchievements = onSnapshot(
       query(collection(db, "publicAchievements"), orderBy("order")),
       (snapshot) => {
-        setAchievements(
+        const { training, workAchievements: workItems } = splitTrainingAndWorkAchievements(
           snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
         );
+        setAchievements(training);
+        setWorkAchievements(workItems);
         clearError("achievements");
         markSourceSettled("achievements");
       },
@@ -182,6 +187,7 @@ export function PortfolioProvider({ children }) {
         projects,
         experience,
         achievements,
+        workAchievements,
         highlights,
         error,
         loading,

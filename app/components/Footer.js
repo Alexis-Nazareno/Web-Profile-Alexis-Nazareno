@@ -139,6 +139,9 @@ export default function Footer() {
               <Link className="transition hover:text-[#5be0bf]" href="/work-lessons">
                 Work lessons
               </Link>
+              <Link className="transition hover:text-[#5be0bf]" href="/work-achievements">
+                Work achievements
+              </Link>
             </div>
             {socialLinks.length > 0 && (
               <div className="mt-7">
