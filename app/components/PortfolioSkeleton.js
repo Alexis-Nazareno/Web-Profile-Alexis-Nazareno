@@ -57,11 +57,15 @@ export function NavbarSkeleton() {
             <SkeletonBlock className="mt-2 h-2 w-24 bg-white/10 dark:bg-white/10" />
           </div>
         </div>
-        <div className="hidden items-center gap-6 md:flex">
+        <div className="hidden items-center gap-6 lg:flex">
           <SkeletonBlock className="h-3 w-12 bg-white/10 dark:bg-white/10" />
           <SkeletonBlock className="h-3 w-14 bg-white/10 dark:bg-white/10" />
           <SkeletonBlock className="h-3 w-16 bg-white/10 dark:bg-white/10" />
           <SkeletonBlock className="h-9 w-24 rounded-full bg-white/10 dark:bg-white/10" />
+        </div>
+        <div className="flex items-center gap-2 lg:hidden">
+          <SkeletonBlock className="h-10 w-10 rounded-full bg-white/10 dark:bg-white/10" />
+          <SkeletonBlock className="h-10 w-10 rounded-full bg-white/10 dark:bg-white/10" />
         </div>
       </div>
     </header>
@@ -86,7 +90,7 @@ export function FooterSkeleton() {
 export function HomeSkeleton() {
   return (
     <PageSkeleton>
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:grid-cols-[1.08fr_0.92fr] md:items-center md:gap-14 md:px-8 md:py-24">
+      <section className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:items-center md:gap-14 md:px-8 md:py-24 lg:grid-cols-[1.08fr_0.92fr]">
         <div>
           <SkeletonBlock className="h-3 w-40" />
           <SkeletonBlock className="mt-10 h-4 w-20" />
@@ -99,7 +103,7 @@ export function HomeSkeleton() {
             <SkeletonBlock className="h-12 w-32 rounded-full" />
           </div>
         </div>
-        <SkeletonBlock className="mx-auto aspect-[4/4.7] w-full max-w-[27rem] rounded-[2rem]" />
+        <SkeletonBlock className="order-first mx-auto aspect-[4/4.7] w-full max-w-[27rem] rounded-[2rem] sm:order-none" />
       </section>
 
       <section className="border-y border-[#e3ece8] dark:border-white/10">
