@@ -13,6 +13,19 @@ const getThemeOptions = () => {
   };
 };
 
+function supportsBirds() {
+  const canvas = document.createElement("canvas");
+  const webgl2 = canvas.getContext("webgl2");
+  const gl = webgl2 || canvas.getContext("webgl");
+  if (!gl) return false;
+
+  const supported =
+    (!!webgl2 || !!gl.getExtension("OES_texture_float")) &&
+    gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) > 0;
+  gl.getExtension("WEBGL_lose_context")?.loseContext();
+  return supported;
+}
+
 export default function VantaBirdsBackground() {
   const backgroundRef = useRef(null);
 
@@ -23,7 +36,23 @@ export default function VantaBirdsBackground() {
     let revealTimer;
     let isDisposed = false;
 
+    const destroyEffect = () => {
+      if (!effect) return;
+      const renderer = effect.renderer;
+      if (renderer?.domElement?.parentNode !== effect.el) {
+        effect.renderer = null;
+      }
+      effect.destroy();
+      renderer?.dispose();
+      effect = null;
+    };
+
     const initializeBackground = async () => {
+      if (!supportsBirds()) {
+        console.warn("Vanta BIRDS background unavailable: required WebGL features are not supported.");
+        return;
+      }
+
       const THREE = await import("three");
       const previousThree = window.THREE;
       window.THREE = THREE;
@@ -64,7 +93,12 @@ export default function VantaBirdsBackground() {
         cohesion: 1,
       });
 
-      const velocityMaterial = effect.velocityVariable.material;
+      const velocityMaterial = effect.velocityVariable?.material;
+      if (!velocityMaterial || !effect.camera) {
+        console.warn("Vanta BIRDS background unavailable: initialization did not complete.");
+        destroyEffect();
+        return;
+      }
       const centerDeclaration = "vec3 central = vec3( 0., 0., 0. );";
       const centerAttraction = "velocity -= normalize( dir ) * delta * 5.;";
       if (
@@ -91,6 +125,7 @@ export default function VantaBirdsBackground() {
     };
 
     initializeBackground().catch((error) => {
+      destroyEffect();
       console.error("Unable to initialize the Vanta BIRDS background.", error);
     });
 
@@ -106,7 +141,7 @@ export default function VantaBirdsBackground() {
       isDisposed = true;
       window.clearTimeout(revealTimer);
       themeObserver.disconnect();
-      effect?.destroy();
+      destroyEffect();
     };
   }, []);
 

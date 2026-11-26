@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { usePortfolio } from "./PortfolioProvider";
 import DarkModeToggle from "./DarkModeToggle";
 import PortfolioImage from "./PortfolioImage";
@@ -56,7 +57,38 @@ function ContactCta({ className = "", onClick }) {
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const headerRef = useRef(null);
+  const menuButtonRef = useRef(null);
+  const pathname = usePathname();
   const { home, loading } = usePortfolio();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const closeOnOutsideClick = (event) => {
+      if (!headerRef.current?.contains(event.target)) setMenuOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = (event) => {
+      if (event.matches) setMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+      desktop.removeEventListener("change", closeOnDesktop);
+    };
+  }, [menuOpen]);
+
   if (loading) return <NavbarSkeleton />;
 
   const initials = (home.name || "Portfolio")
@@ -79,7 +111,7 @@ export default function Navbar() {
   ));
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a171d]/95 text-white shadow-[0_8px_28px_rgba(4,17,22,0.12)] backdrop-blur-xl">
+    <header ref={headerRef} className="sticky top-0 z-50 border-b border-white/10 bg-[#0a171d]/95 text-white shadow-[0_8px_28px_rgba(4,17,22,0.12)] backdrop-blur-xl">
       <nav
         aria-label="Main navigation"
         className="mx-auto flex min-h-[76px] max-w-6xl items-center justify-between gap-5 px-5 md:px-8"
@@ -106,26 +138,27 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <div className="hidden items-center gap-8 md:flex">
+        <div className="hidden items-center gap-8 lg:flex">
           {navLinks}
           <DarkModeToggle />
           <ContactCta />
         </div>
 
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-2 lg:hidden">
           <DarkModeToggle />
           <button
+            ref={menuButtonRef}
             type="button"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             aria-controls="mobile-navigation"
             onClick={() => setMenuOpen((isOpen) => !isOpen)}
-            className="grid h-10 w-10 place-items-center rounded-full border border-white/15 text-white"
+            className={`grid h-10 w-10 place-items-center rounded-full border transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5be0bf] motion-reduce:transition-none ${menuOpen ? "border-[#5be0bf]/60 bg-[#5be0bf]/10 text-[#83e8cc]" : "border-white/15 text-white hover:border-[#5be0bf]/50 hover:text-[#83e8cc]"}`}
           >
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-5 w-5"
+              className={`h-5 w-5 transition-transform duration-300 motion-reduce:transition-none ${menuOpen ? "rotate-90" : ""}`}
               fill="none"
               stroke="currentColor"
               strokeWidth="1.8"
@@ -143,15 +176,37 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {menuOpen && (
-        <div
-          id="mobile-navigation"
-          className="grid gap-1 border-t border-white/10 bg-[#0a171d] px-5 py-4 md:hidden"
-        >
-          {navLinks}
-          <ContactCta className="mt-2 w-fit" onClick={() => setMenuOpen(false)} />
+      <nav
+        id="mobile-navigation"
+        aria-label="Mobile navigation"
+        aria-hidden={!menuOpen}
+        inert={!menuOpen}
+        className={`mobile-navigation-panel absolute left-5 right-5 top-[calc(100%+0.5rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-[1.4rem] border border-[#347665]/60 bg-[#102820] p-3 shadow-[0_20px_55px_rgba(0,0,0,0.3)] sm:left-auto sm:right-8 sm:w-[min(26rem,calc(100%-4rem))] lg:hidden ${menuOpen ? "is-open" : ""}`}
+      >
+        <div className="flex items-center justify-between px-3 pb-3 pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#83ddc7]">Navigate</p>
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#5be0bf] shadow-[0_0_10px_rgba(91,224,191,0.6)]" />
         </div>
-      )}
+        <div className="grid gap-1">
+          {links.map(([label, href]) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={pathname === href ? "page" : undefined}
+              onClick={() => setMenuOpen(false)}
+              className={`mobile-navigation-link group flex min-h-12 items-center justify-between gap-4 rounded-xl px-3 text-[15px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#5be0bf] motion-reduce:transition-none ${pathname === href ? "bg-[#5be0bf]/15 text-[#9bf1d7]" : "text-white/85 hover:bg-white/5 hover:text-white"}`}
+            >
+              <span>{label}</span>
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-[#79d9be] transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none">
+                <path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+          ))}
+        </div>
+        <div className="mt-3 border-t border-white/10 px-1 pt-3">
+          <ContactCta className="w-full justify-between" onClick={() => setMenuOpen(false)} />
+        </div>
+      </nav>
     </header>
   );
 }

@@ -97,7 +97,8 @@ Published training and certificates appear newest first by their date. Use a
 year (`2025`), month and year (`May 2025` or `2025-05`), or a full date
 (`May 15, 2025` or `2025-05-15`). Dates without a month or day are sorted
 as the start of that year or month; missing or unrecognized dates appear last
-in their existing order.
+in their existing order. Training cards show up to four full, uncropped images;
+select **View description** to read the complete description.
 
 ```text
 Title: Example project
